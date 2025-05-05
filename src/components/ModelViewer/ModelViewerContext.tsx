@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { exportModelAsGLB, exportModelAsGLTF } from './exportUtils';
 
 interface ModelViewerContextType {
   scene: THREE.Scene | null;
@@ -24,6 +25,8 @@ interface ModelViewerContextType {
   setIsModelReady: (isModelReady: boolean) => void;
   setMousePosition: (position: { x: number; y: number }) => void;
   setBackgroundColor: (color: THREE.Color | string | number) => void;
+  exportAsGLB: (fileName?: string) => void;
+  exportAsGLTF: (fileName?: string) => void;
 }
 
 const ModelViewerContext = createContext<ModelViewerContextType | undefined>(undefined);
@@ -56,6 +59,16 @@ export const ModelViewerProvider: React.FC<{
     }
   };
 
+  // Export model as GLB
+  const exportAsGLB = (fileName = 'model') => {
+    exportModelAsGLB(model, fileName);
+  };
+
+  // Export model as GLTF
+  const exportAsGLTF = (fileName = 'model') => {
+    exportModelAsGLTF(model, fileName);
+  };
+
   const value = {
     scene,
     camera,
@@ -76,7 +89,9 @@ export const ModelViewerProvider: React.FC<{
     setIsLoading,
     setIsModelReady,
     setMousePosition,
-    setBackgroundColor
+    setBackgroundColor,
+    exportAsGLB,
+    exportAsGLTF
   };
 
   return (

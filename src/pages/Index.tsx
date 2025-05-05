@@ -5,8 +5,7 @@ import { ImageUploader } from '@/components/ImageUploader';
 import { ModelViewer } from '@/components/ModelViewer';
 import { BackgroundAnimation } from '@/components/BackgroundAnimation';
 import { Button } from '@/components/ui/button';
-import { ArrowDown, Download } from 'lucide-react';
-import { toast } from 'sonner';
+import { ArrowDown } from 'lucide-react';
 
 const Index = () => {
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
@@ -15,11 +14,6 @@ const Index = () => {
   const handleImageUpload = (file: File) => {
     setUploadedImage(file);
     setImageUrl(URL.createObjectURL(file));
-  };
-
-  const handleDownload = () => {
-    // In a real app, this would download the actual 3D model
-    toast.info('This is a demo. In a production app, this would download the 3D model.');
   };
 
   return (
@@ -48,17 +42,14 @@ const Index = () => {
           
           <div className="flex flex-col space-y-6">
             <h2 className="text-2xl font-semibold text-white">Generated 3D Model</h2>
-            <ModelViewer imageUrl={imageUrl} className="min-h-[400px] h-full" />
+            <ModelViewer 
+              imageUrl={imageUrl} 
+              className="min-h-[400px] h-full" 
+            />
             <div className="flex justify-between items-center">
               <p className="text-sm text-muted-foreground">
                 Drag to rotate, scroll to zoom, double-click to reset view
               </p>
-              {imageUrl && (
-                <Button onClick={handleDownload} variant="outline" className="gradient-border">
-                  <Download className="w-4 h-4 mr-2" />
-                  Download Model
-                </Button>
-              )}
             </div>
           </div>
         </div>
