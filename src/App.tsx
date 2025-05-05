@@ -10,10 +10,9 @@ import NotFound from "./pages/NotFound";
 // Create a client
 const queryClient = new QueryClient();
 
-// Make App a function component instead of an arrow function constant
 function App() {
   return (
-    <React.StrictMode>
+    <>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
@@ -26,7 +25,7 @@ function App() {
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
-    </React.StrictMode>
+    </>
   );
 }
 
