@@ -22,7 +22,8 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
     controls,
     model,
     isModelReady,
-    mousePosition
+    mousePosition,
+    backgroundColor
   } = useModelViewer();
 
   const animationRef = useRef<number>(0);
@@ -33,7 +34,7 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
 
     // Create scene
     const newScene = new THREE.Scene();
-    newScene.background = new THREE.Color(0x111827);
+    newScene.background = backgroundColor;
     setScene(newScene);
 
     // Create camera
@@ -78,6 +79,13 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
       }
     };
   }, []);
+
+  // Handle background color changes
+  useEffect(() => {
+    if (scene) {
+      scene.background = backgroundColor;
+    }
+  }, [backgroundColor, scene]);
 
   // Setup animation loop
   useEffect(() => {

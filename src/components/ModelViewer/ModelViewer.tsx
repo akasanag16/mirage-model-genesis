@@ -10,14 +10,15 @@ import { ViewerUI } from './ViewerUI';
 interface ModelViewerProps {
   imageUrl: string | null;
   className?: string;
+  backgroundColor?: string | number;
 }
 
-export const ModelViewer = ({ imageUrl, className }: ModelViewerProps) => {
+export const ModelViewer = ({ imageUrl, className, backgroundColor }: ModelViewerProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   return (
     <Card className={cn('relative overflow-hidden h-full', className)}>
-      <ModelViewerProvider>
+      <ModelViewerProvider initialBackgroundColor={backgroundColor}>
         <div 
           ref={containerRef} 
           className="w-full h-full min-h-[400px]"
