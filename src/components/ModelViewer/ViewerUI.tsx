@@ -14,6 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip';
+import { toast } from 'sonner';
 
 interface ViewerUIProps {
   imageUrl: string | null;
@@ -21,6 +22,16 @@ interface ViewerUIProps {
 
 export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
   const { isLoading, isModelReady, exportAsGLB, exportAsGLTF } = useModelViewer();
+
+  const handleExportGLB = () => {
+    exportAsGLB();
+    toast.success('Model exported as GLB');
+  };
+
+  const handleExportGLTF = () => {
+    exportAsGLTF();
+    toast.success('Model exported as GLTF');
+  };
 
   return (
     <>
@@ -52,10 +63,10 @@ export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => exportAsGLB()}>
+                    <DropdownMenuItem onClick={handleExportGLB}>
                       Export as GLB
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => exportAsGLTF()}>
+                    <DropdownMenuItem onClick={handleExportGLTF}>
                       Export as GLTF
                     </DropdownMenuItem>
                   </DropdownMenuContent>
