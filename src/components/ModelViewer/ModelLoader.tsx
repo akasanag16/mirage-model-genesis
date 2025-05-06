@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { useModelViewer } from './ModelViewerContext';
+import { toast } from 'sonner';
 
 interface ModelLoaderProps {
   imageUrl: string | null;
@@ -81,6 +82,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
             scene.add(newModel);
             setModel(newModel);
             setIsModelReady(true);
+            toast.success('3D Model generated successfully');
           }
           
           setIsLoading(false);
@@ -91,11 +93,16 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         },
         (error) => {
           console.error('An error happened loading the model', error);
+          toast.error('Failed to generate 3D model');
           setIsLoading(false);
         }
       );
+    }).catch(error => {
+      console.error('Error generating model:', error);
+      toast.error('Failed to generate 3D model');
+      setIsLoading(false);
     });
-  }, [imageUrl, scene]);
+  }, [imageUrl, scene, model, setIsLoading, setIsModelReady, setModel]);
 
   return null;
 };

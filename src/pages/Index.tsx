@@ -10,10 +10,12 @@ import { ArrowDown } from 'lucide-react';
 const Index = () => {
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [supabaseImageUrl, setSupabaseImageUrl] = useState<string | null>(null);
 
-  const handleImageUpload = (file: File) => {
+  const handleImageUpload = (file: File, url: string) => {
     setUploadedImage(file);
     setImageUrl(URL.createObjectURL(file));
+    setSupabaseImageUrl(url);
   };
 
   return (
@@ -38,6 +40,13 @@ const Index = () => {
             <p className="text-sm text-muted-foreground">
               Supported formats: JPEG, PNG, WebP. For best results, use images with clear subjects and good lighting.
             </p>
+            {supabaseImageUrl && (
+              <div className="p-2 bg-secondary/30 rounded-md border border-border">
+                <p className="text-xs text-muted-foreground break-all">
+                  <span className="font-semibold">Storage URL:</span> {supabaseImageUrl}
+                </p>
+              </div>
+            )}
           </div>
           
           <div className="flex flex-col space-y-6">
