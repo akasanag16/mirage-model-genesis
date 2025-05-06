@@ -1,5 +1,5 @@
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { useModelViewer } from './ModelViewerContext';
@@ -17,10 +17,35 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     setIsLoading, 
     setIsModelReady 
   } = useModelViewer();
+  
+  const [loadAttempts, setLoadAttempts] = useState(0);
+  const [imageTexture, setImageTexture] = useState<THREE.Texture | null>(null);
 
-  // Load or update 3D model when imageUrl changes
+  // Load the image texture first when imageUrl changes
   useEffect(() => {
-    if (!imageUrl || !scene) return;
+    if (!imageUrl) return;
+
+    const textureLoader = new THREE.TextureLoader();
+    textureLoader.crossOrigin = "anonymous";
+    
+    textureLoader.load(
+      imageUrl,
+      (texture) => {
+        console.log("Image texture loaded successfully:", imageUrl);
+        setImageTexture(texture);
+      },
+      undefined, // onProgress callback not needed
+      (error) => {
+        console.error("Failed to load image texture:", error);
+        toast.error("Failed to load image texture");
+        setImageTexture(null);
+      }
+    );
+  }, [imageUrl]);
+
+  // Load or update 3D model when imageUrl and texture are ready
+  useEffect(() => {
+    if (!imageUrl || !scene || loadAttempts > 3) return;
     
     setIsLoading(true);
     setIsModelReady(false);
@@ -44,7 +69,6 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     // Generate and load model
     generateModel().then(() => {
       // Load a reliable default model
-      // Using a publicly available model URL that's known to work
       const loader = new GLTFLoader();
       loader.load(
         // Use a reliable model from a public CDN
@@ -63,20 +87,47 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
           
           newModel.position.sub(center.multiplyScalar(scale));
           
-          // Enable shadows
-          newModel.traverse((node) => {
-            if (node instanceof THREE.Mesh) {
-              node.castShadow = true;
-              node.receiveShadow = true;
-              
-              // Apply improved materials
-              if (node.material) {
-                const material = node.material as THREE.MeshStandardMaterial;
-                material.roughness = 0.7;
-                material.metalness = 0.3;
+          // Apply the uploaded image texture to the model if available
+          if (imageTexture) {
+            newModel.traverse((node) => {
+              if (node instanceof THREE.Mesh) {
+                node.castShadow = true;
+                node.receiveShadow = true;
+                
+                // Create a new material with the uploaded image texture
+                const material = new THREE.MeshStandardMaterial({
+                  map: imageTexture,
+                  roughness: 0.5,
+                  metalness: 0.2,
+                });
+                
+                // Apply the new material to the mesh
+                if (Array.isArray(node.material)) {
+                  // If the mesh has multiple materials
+                  node.material = node.material.map(() => material.clone());
+                } else {
+                  // If the mesh has a single material
+                  node.material = material;
+                }
               }
-            }
-          });
+            });
+            
+            console.log("Applied uploaded image texture to model");
+          } else {
+            // Apply default materials if no texture is available
+            newModel.traverse((node) => {
+              if (node instanceof THREE.Mesh) {
+                node.castShadow = true;
+                node.receiveShadow = true;
+                
+                if (node.material) {
+                  const material = node.material as THREE.MeshStandardMaterial;
+                  material.roughness = 0.7;
+                  material.metalness = 0.3;
+                }
+              }
+            });
+          }
           
           // Add the model to the scene
           if (scene) {
@@ -94,7 +145,8 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         },
         (error) => {
           console.error('An error happened loading the model', error);
-          toast.error('Failed to generate 3D model');
+          toast.error('Failed to load primary model, trying fallback...');
+          setLoadAttempts(prev => prev + 1);
           
           // Try fallback model if the first one fails
           tryFallbackModel();
@@ -105,7 +157,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
       toast.error('Failed to generate 3D model');
       setIsLoading(false);
     });
-  }, [imageUrl, scene, model, setIsLoading, setIsModelReady, setModel]);
+  }, [imageUrl, imageTexture, scene, model, setIsLoading, setIsModelReady, setModel, loadAttempts]);
 
   // Fallback model loader function
   const tryFallbackModel = () => {
@@ -128,6 +180,27 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         newModel.scale.setScalar(scale);
         
         newModel.position.sub(center.multiplyScalar(scale));
+        
+        // Apply the uploaded image texture to the duck model if available
+        if (imageTexture) {
+          const material = new THREE.MeshStandardMaterial({
+            map: imageTexture,
+            roughness: 0.5,
+            metalness: 0.2
+          });
+          
+          newModel.traverse((node) => {
+            if (node instanceof THREE.Mesh) {
+              node.castShadow = true;
+              node.receiveShadow = true;
+              if (Array.isArray(node.material)) {
+                node.material = node.material.map(() => material.clone());
+              } else {
+                node.material = material;
+              }
+            }
+          });
+        }
         
         // Add the model to the scene
         if (scene) {

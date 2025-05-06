@@ -13,8 +13,10 @@ const Index = () => {
   const [supabaseImageUrl, setSupabaseImageUrl] = useState<string | null>(null);
 
   const handleImageUpload = (file: File, url: string) => {
+    console.log("Image uploaded:", file.name, "URL:", url);
     setUploadedImage(file);
-    setImageUrl(URL.createObjectURL(file));
+    // Use the Supabase URL for the 3D model generation
+    setImageUrl(url);
     setSupabaseImageUrl(url);
   };
 
