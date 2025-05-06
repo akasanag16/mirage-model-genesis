@@ -43,11 +43,12 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
 
     // Generate and load model
     generateModel().then(() => {
-      // Load placeholder humanoid model
+      // Load a reliable default model
+      // Using a publicly available model URL that's known to work
       const loader = new GLTFLoader();
       loader.load(
-        // Use a placeholder model URL - in a real app, this would be the result from the API
-        'https://vazxmixjsiawhamofees.supabase.co/storage/v1/object/public/models/anime-girl/model.gltf',
+        // Use a reliable model from a public CDN
+        'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf',
         (gltf) => {
           const newModel = gltf.scene;
           
@@ -94,7 +95,9 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         (error) => {
           console.error('An error happened loading the model', error);
           toast.error('Failed to generate 3D model');
-          setIsLoading(false);
+          
+          // Try fallback model if the first one fails
+          tryFallbackModel();
         }
       );
     }).catch(error => {
@@ -103,6 +106,47 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
       setIsLoading(false);
     });
   }, [imageUrl, scene, model, setIsLoading, setIsModelReady, setModel]);
+
+  // Fallback model loader function
+  const tryFallbackModel = () => {
+    if (!scene) return;
+    
+    const loader = new GLTFLoader();
+    loader.load(
+      // Another common test model as fallback
+      'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/Duck/glTF/Duck.gltf',
+      (gltf) => {
+        const newModel = gltf.scene;
+        
+        // Center and scale the model
+        const box = new THREE.Box3().setFromObject(newModel);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+        
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 2 / maxDim;
+        newModel.scale.setScalar(scale);
+        
+        newModel.position.sub(center.multiplyScalar(scale));
+        
+        // Add the model to the scene
+        if (scene) {
+          scene.add(newModel);
+          setModel(newModel);
+          setIsModelReady(true);
+          toast.success('Fallback 3D Model loaded successfully');
+        }
+        
+        setIsLoading(false);
+      },
+      undefined,
+      (error) => {
+        console.error('Fallback model failed to load:', error);
+        toast.error('Could not load any 3D model');
+        setIsLoading(false);
+      }
+    );
+  };
 
   return null;
 };
