@@ -10,14 +10,13 @@ import { ArrowDown } from 'lucide-react';
 const Index = () => {
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [supabaseImageUrl, setSupabaseImageUrl] = useState<string | null>(null);
 
   const handleImageUpload = (file: File, url: string) => {
-    console.log("Image uploaded:", file.name, "URL:", url);
+    console.log("Image uploaded:", file.name);
+    console.log("Image URL for 3D model generation:", url);
     setUploadedImage(file);
-    // Use the Supabase URL for the 3D model generation
+    // Use URL directly for the 3D model generation
     setImageUrl(url);
-    setSupabaseImageUrl(url);
   };
 
   return (
@@ -42,10 +41,10 @@ const Index = () => {
             <p className="text-sm text-muted-foreground">
               Supported formats: JPEG, PNG, WebP. For best results, use images with clear subjects and good lighting.
             </p>
-            {supabaseImageUrl && (
+            {imageUrl && (
               <div className="p-2 bg-secondary/30 rounded-md border border-border">
                 <p className="text-xs text-muted-foreground break-all">
-                  <span className="font-semibold">Storage URL:</span> {supabaseImageUrl}
+                  <span className="font-semibold">Storage URL:</span> {imageUrl}
                 </p>
               </div>
             )}

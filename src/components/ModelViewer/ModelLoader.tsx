@@ -25,6 +25,10 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
   useEffect(() => {
     if (!imageUrl) return;
 
+    console.log("Loading image texture from URL:", imageUrl);
+    setIsLoading(true);
+    setIsModelReady(false);
+
     const textureLoader = new THREE.TextureLoader();
     textureLoader.crossOrigin = "anonymous";
     
@@ -39,26 +43,16 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         console.error("Failed to load image texture:", error);
         toast.error("Failed to load image texture");
         setImageTexture(null);
+        setIsLoading(false);
       }
     );
-  }, [imageUrl]);
+  }, [imageUrl, setIsLoading]);
 
-  // Load or update 3D model when imageUrl and texture are ready
+  // Load or update 3D model when imageTexture is ready
   useEffect(() => {
-    if (!imageUrl || !scene || loadAttempts > 3) return;
+    if (!imageTexture || !scene || loadAttempts > 3 || !imageUrl) return;
     
-    setIsLoading(true);
-    setIsModelReady(false);
-
-    // Mock API call to generate 3D model from image
-    const generateModel = () => {
-      return new Promise<void>((resolve) => {
-        // Simulate loading delay - would be replaced with actual API call
-        setTimeout(() => {
-          resolve();
-        }, 2000); // 2 second mock delay
-      });
-    };
+    console.log("Starting 3D model generation with texture:", imageTexture);
 
     // Clear previous model if any
     if (model && scene) {
@@ -67,101 +61,92 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     }
 
     // Generate and load model
-    generateModel().then(() => {
-      // Load a reliable default model
-      const loader = new GLTFLoader();
-      loader.load(
-        // Use a reliable model from a public CDN
-        'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf',
-        (gltf) => {
-          const newModel = gltf.scene;
-          
-          // Center and scale the model
-          const box = new THREE.Box3().setFromObject(newModel);
-          const center = box.getCenter(new THREE.Vector3());
-          const size = box.getSize(new THREE.Vector3());
-          
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 2 / maxDim;
-          newModel.scale.setScalar(scale);
-          
-          newModel.position.sub(center.multiplyScalar(scale));
-          
-          // Apply the uploaded image texture to the model if available
-          if (imageTexture) {
-            newModel.traverse((node) => {
-              if (node instanceof THREE.Mesh) {
-                node.castShadow = true;
-                node.receiveShadow = true;
-                
-                // Create a new material with the uploaded image texture
-                const material = new THREE.MeshStandardMaterial({
-                  map: imageTexture,
-                  roughness: 0.5,
-                  metalness: 0.2,
-                });
-                
-                // Apply the new material to the mesh
-                if (Array.isArray(node.material)) {
-                  // If the mesh has multiple materials
-                  node.material = node.material.map(() => material.clone());
-                } else {
-                  // If the mesh has a single material
-                  node.material = material;
-                }
-              }
-            });
+    const generateModel = async () => {
+      try {
+        // Load a reliable default model
+        const loader = new GLTFLoader();
+        loader.load(
+          // Use a reliable model from a public CDN
+          'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf',
+          (gltf) => {
+            if (!scene) {
+              console.error("Scene not available when model loaded");
+              setIsLoading(false);
+              return;
+            }
+
+            const newModel = gltf.scene;
             
-            console.log("Applied uploaded image texture to model");
-          } else {
-            // Apply default materials if no texture is available
-            newModel.traverse((node) => {
-              if (node instanceof THREE.Mesh) {
-                node.castShadow = true;
-                node.receiveShadow = true;
-                
-                if (node.material) {
-                  const material = node.material as THREE.MeshStandardMaterial;
-                  material.roughness = 0.7;
-                  material.metalness = 0.3;
+            // Center and scale the model
+            const box = new THREE.Box3().setFromObject(newModel);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const scale = 2 / maxDim;
+            newModel.scale.setScalar(scale);
+            
+            newModel.position.sub(center.multiplyScalar(scale));
+            
+            // Apply the uploaded image texture to all materials
+            if (imageTexture) {
+              console.log("Applying uploaded image texture to model");
+              newModel.traverse((node) => {
+                if (node instanceof THREE.Mesh && node.material) {
+                  // Create a new standard material with the uploaded image
+                  const material = new THREE.MeshStandardMaterial({
+                    map: imageTexture,
+                    roughness: 0.5,
+                    metalness: 0.2
+                  });
+                  
+                  // Apply the material to all mesh parts
+                  if (Array.isArray(node.material)) {
+                    node.material = node.material.map(() => material.clone());
+                  } else {
+                    node.material = material;
+                  }
+                  
+                  node.castShadow = true;
+                  node.receiveShadow = true;
                 }
-              }
-            });
-          }
-          
-          // Add the model to the scene
-          if (scene) {
+              });
+            }
+            
+            // Add the model to the scene
             scene.add(newModel);
             setModel(newModel);
             setIsModelReady(true);
+            setIsLoading(false);
             toast.success('3D Model generated successfully');
+            console.log("Model added to scene successfully");
+          },
+          (xhr) => {
+            // Show loading progress
+            console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+          },
+          (error) => {
+            console.error('An error happened loading the model', error);
+            toast.error('Failed to load primary model, trying fallback...');
+            setLoadAttempts(prev => prev + 1);
+            
+            // Try fallback model
+            tryFallbackModel();
           }
-          
-          setIsLoading(false);
-        },
-        (xhr) => {
-          // Show loading progress if needed
-          console.log((xhr.loaded / xhr.total * 100) + '% loaded');
-        },
-        (error) => {
-          console.error('An error happened loading the model', error);
-          toast.error('Failed to load primary model, trying fallback...');
-          setLoadAttempts(prev => prev + 1);
-          
-          // Try fallback model if the first one fails
-          tryFallbackModel();
-        }
-      );
-    }).catch(error => {
-      console.error('Error generating model:', error);
-      toast.error('Failed to generate 3D model');
-      setIsLoading(false);
-    });
-  }, [imageUrl, imageTexture, scene, model, setIsLoading, setIsModelReady, setModel, loadAttempts]);
+        );
+      } catch (error) {
+        console.error('Error generating model:', error);
+        toast.error('Failed to generate 3D model');
+        setIsLoading(false);
+      }
+    };
+
+    generateModel();
+  }, [imageTexture, scene, model, setModel, setIsLoading, setIsModelReady, loadAttempts, imageUrl]);
 
   // Fallback model loader function
   const tryFallbackModel = () => {
-    if (!scene) return;
+    if (!scene || !imageTexture) return;
     
     const loader = new GLTFLoader();
     loader.load(
@@ -181,26 +166,24 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         
         newModel.position.sub(center.multiplyScalar(scale));
         
-        // Apply the uploaded image texture to the duck model if available
-        if (imageTexture) {
-          const material = new THREE.MeshStandardMaterial({
-            map: imageTexture,
-            roughness: 0.5,
-            metalness: 0.2
-          });
-          
-          newModel.traverse((node) => {
-            if (node instanceof THREE.Mesh) {
-              node.castShadow = true;
-              node.receiveShadow = true;
-              if (Array.isArray(node.material)) {
-                node.material = node.material.map(() => material.clone());
-              } else {
-                node.material = material;
-              }
+        // Apply the uploaded image texture to the duck model
+        const material = new THREE.MeshStandardMaterial({
+          map: imageTexture,
+          roughness: 0.5,
+          metalness: 0.2
+        });
+        
+        newModel.traverse((node) => {
+          if (node instanceof THREE.Mesh) {
+            node.castShadow = true;
+            node.receiveShadow = true;
+            if (Array.isArray(node.material)) {
+              node.material = node.material.map(() => material.clone());
+            } else {
+              node.material = material;
             }
-          });
-        }
+          }
+        });
         
         // Add the model to the scene
         if (scene) {
