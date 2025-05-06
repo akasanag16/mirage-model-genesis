@@ -6,6 +6,7 @@ import { ModelViewer } from '@/components/ModelViewer';
 import { BackgroundAnimation } from '@/components/BackgroundAnimation';
 import { Button } from '@/components/ui/button';
 import { ArrowDown } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Index = () => {
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
@@ -15,8 +16,11 @@ const Index = () => {
     console.log("Image uploaded:", file.name);
     console.log("Image URL for 3D model generation:", url);
     setUploadedImage(file);
-    // Use URL directly for the 3D model generation
+    
+    // Make sure we're using the proper URL for the 3D model generation
     setImageUrl(url);
+    
+    toast.success(`Image "${file.name}" uploaded successfully!`);
   };
 
   return (
@@ -44,7 +48,7 @@ const Index = () => {
             {imageUrl && (
               <div className="p-2 bg-secondary/30 rounded-md border border-border">
                 <p className="text-xs text-muted-foreground break-all">
-                  <span className="font-semibold">Storage URL:</span> {imageUrl}
+                  <span className="font-semibold">Image URL:</span> {imageUrl}
                 </p>
               </div>
             )}

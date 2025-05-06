@@ -15,6 +15,8 @@ interface ModelViewerProps {
 
 export const ModelViewer = ({ imageUrl, className, backgroundColor }: ModelViewerProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  console.log("ModelViewer received imageUrl:", imageUrl);
 
   return (
     <Card className={cn('relative overflow-hidden h-full', className)}>

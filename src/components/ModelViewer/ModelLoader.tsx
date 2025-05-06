@@ -21,13 +21,23 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
   const [loadAttempts, setLoadAttempts] = useState(0);
   const [imageTexture, setImageTexture] = useState<THREE.Texture | null>(null);
 
-  // Load the image texture first when imageUrl changes
+  // Load the image texture when imageUrl changes
   useEffect(() => {
-    if (!imageUrl) return;
+    if (!imageUrl) {
+      setIsLoading(false);
+      setIsModelReady(false);
+      return;
+    }
 
-    console.log("Loading image texture from URL:", imageUrl);
+    console.log("Starting to load image texture from URL:", imageUrl);
     setIsLoading(true);
     setIsModelReady(false);
+
+    // Clear previous texture
+    if (imageTexture) {
+      imageTexture.dispose();
+      setImageTexture(null);
+    }
 
     const textureLoader = new THREE.TextureLoader();
     textureLoader.crossOrigin = "anonymous";
@@ -35,13 +45,17 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     textureLoader.load(
       imageUrl,
       (texture) => {
-        console.log("Image texture loaded successfully:", imageUrl);
+        console.log("✅ Image texture loaded successfully:", imageUrl);
         setImageTexture(texture);
+        toast.success("Image texture loaded successfully");
       },
-      undefined, // onProgress callback not needed
+      (xhr) => {
+        // Progress callback
+        console.log(`Loading texture: ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`);
+      },
       (error) => {
-        console.error("Failed to load image texture:", error);
-        toast.error("Failed to load image texture");
+        console.error("❌ Failed to load image texture:", error);
+        toast.error("Failed to load image texture. Please try again with a different image.");
         setImageTexture(null);
         setIsLoading(false);
       }
@@ -50,9 +64,10 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
 
   // Load or update 3D model when imageTexture is ready
   useEffect(() => {
-    if (!imageTexture || !scene || loadAttempts > 3 || !imageUrl) return;
+    if (!imageTexture || !scene || loadAttempts > 3) return;
     
     console.log("Starting 3D model generation with texture:", imageTexture);
+    toast.info("Generating 3D model...");
 
     // Clear previous model if any
     if (model && scene) {
@@ -65,9 +80,13 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
       try {
         // Load a reliable default model
         const loader = new GLTFLoader();
+        
+        // Use a reliable model from a public CDN
+        const modelUrl = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf';
+        console.log("Loading 3D model from:", modelUrl);
+        
         loader.load(
-          // Use a reliable model from a public CDN
-          'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf',
+          modelUrl,
           (gltf) => {
             if (!scene) {
               console.error("Scene not available when model loaded");
@@ -76,6 +95,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
             }
 
             const newModel = gltf.scene;
+            console.log("Model loaded successfully, applying texture");
             
             // Center and scale the model
             const box = new THREE.Box3().setFromObject(newModel);
@@ -91,13 +111,17 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
             // Apply the uploaded image texture to all materials
             if (imageTexture) {
               console.log("Applying uploaded image texture to model");
+              imageTexture.flipY = false; // Fix texture orientation
+              imageTexture.encoding = THREE.sRGBEncoding;
+              
               newModel.traverse((node) => {
                 if (node instanceof THREE.Mesh && node.material) {
                   // Create a new standard material with the uploaded image
                   const material = new THREE.MeshStandardMaterial({
                     map: imageTexture,
-                    roughness: 0.5,
-                    metalness: 0.2
+                    roughness: 0.4,
+                    metalness: 0.3,
+                    envMapIntensity: 1.0
                   });
                   
                   // Apply the material to all mesh parts
@@ -123,7 +147,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
           },
           (xhr) => {
             // Show loading progress
-            console.log((xhr.loaded / xhr.total * 100) + '% loaded');
+            console.log((xhr.loaded / xhr.total * 100).toFixed(2) + '% model loaded');
           },
           (error) => {
             console.error('An error happened loading the model', error);
@@ -142,11 +166,13 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     };
 
     generateModel();
-  }, [imageTexture, scene, model, setModel, setIsLoading, setIsModelReady, loadAttempts, imageUrl]);
+  }, [imageTexture, scene, model, setModel, setIsLoading, setIsModelReady, loadAttempts]);
 
   // Fallback model loader function
   const tryFallbackModel = () => {
     if (!scene || !imageTexture) return;
+    
+    console.log("Attempting to load fallback model");
     
     const loader = new GLTFLoader();
     loader.load(
