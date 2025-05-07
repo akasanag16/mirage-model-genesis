@@ -1,7 +1,6 @@
 
 import { useEffect, useState } from 'react';
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { useModelViewer } from './ModelViewerContext';
 import { toast } from 'sonner';
 
@@ -12,13 +11,11 @@ interface ModelLoaderProps {
 export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
   const { 
     scene, 
-    model, 
     setModel, 
     setIsLoading, 
     setIsModelReady 
   } = useModelViewer();
   
-  const [loadAttempts, setLoadAttempts] = useState(0);
   const [imageTexture, setImageTexture] = useState<THREE.Texture | null>(null);
 
   // Load the image texture when imageUrl changes
@@ -45,189 +42,104 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     textureLoader.load(
       imageUrl,
       (texture) => {
-        console.log("✅ Image texture loaded successfully:", imageUrl);
+        console.log("✅ Image texture loaded successfully");
         setImageTexture(texture);
-        toast.success("Image texture loaded successfully");
+        toast.success("Image loaded successfully");
+        createImagePlane(texture);
       },
       (xhr) => {
-        // Progress callback
         console.log(`Loading texture: ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`);
       },
       (error) => {
         console.error("❌ Failed to load image texture:", error);
-        toast.error("Failed to load image texture. Please try again with a different image.");
+        toast.error("Failed to load image. Please try again with a different image.");
         setImageTexture(null);
         setIsLoading(false);
       }
     );
   }, [imageUrl, setIsLoading]);
 
-  // Load or update 3D model when imageTexture is ready
-  useEffect(() => {
-    if (!imageTexture || !scene || loadAttempts > 3) return;
-    
-    console.log("Starting 3D model generation with texture:", imageTexture);
-    toast.info("Generating 3D model...");
-
-    // Clear previous model if any
-    if (model && scene) {
-      scene.remove(model);
-      setModel(null);
+  // Create a 3D representation of the image
+  const createImagePlane = (texture: THREE.Texture) => {
+    if (!scene) {
+      console.error("Scene not available when creating image plane");
+      setIsLoading(false);
+      return;
     }
 
-    // Generate and load model
-    const generateModel = async () => {
-      try {
-        // Load a reliable default model
-        const loader = new GLTFLoader();
-        
-        // Use a reliable model from a public CDN
-        const modelUrl = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf';
-        console.log("Loading 3D model from:", modelUrl);
-        
-        loader.load(
-          modelUrl,
-          (gltf) => {
-            if (!scene) {
-              console.error("Scene not available when model loaded");
-              setIsLoading(false);
-              return;
-            }
-
-            const newModel = gltf.scene;
-            console.log("Model loaded successfully, applying texture");
-            
-            // Center and scale the model
-            const box = new THREE.Box3().setFromObject(newModel);
-            const center = box.getCenter(new THREE.Vector3());
-            const size = box.getSize(new THREE.Vector3());
-            
-            const maxDim = Math.max(size.x, size.y, size.z);
-            const scale = 2 / maxDim;
-            newModel.scale.setScalar(scale);
-            
-            newModel.position.sub(center.multiplyScalar(scale));
-            
-            // Apply the uploaded image texture to all materials
-            if (imageTexture) {
-              console.log("Applying uploaded image texture to model");
-              imageTexture.flipY = false; // Fix texture orientation
-              imageTexture.encoding = THREE.sRGBEncoding;
-              
-              newModel.traverse((node) => {
-                if (node instanceof THREE.Mesh && node.material) {
-                  // Create a new standard material with the uploaded image
-                  const material = new THREE.MeshStandardMaterial({
-                    map: imageTexture,
-                    roughness: 0.4,
-                    metalness: 0.3,
-                    envMapIntensity: 1.0
-                  });
-                  
-                  // Apply the material to all mesh parts
-                  if (Array.isArray(node.material)) {
-                    node.material = node.material.map(() => material.clone());
-                  } else {
-                    node.material = material;
-                  }
-                  
-                  node.castShadow = true;
-                  node.receiveShadow = true;
-                }
-              });
-            }
-            
-            // Add the model to the scene
-            scene.add(newModel);
-            setModel(newModel);
-            setIsModelReady(true);
-            setIsLoading(false);
-            toast.success('3D Model generated successfully');
-            console.log("Model added to scene successfully");
-          },
-          (xhr) => {
-            // Show loading progress
-            console.log((xhr.loaded / xhr.total * 100).toFixed(2) + '% model loaded');
-          },
-          (error) => {
-            console.error('An error happened loading the model', error);
-            toast.error('Failed to load primary model, trying fallback...');
-            setLoadAttempts(prev => prev + 1);
-            
-            // Try fallback model
-            tryFallbackModel();
-          }
-        );
-      } catch (error) {
-        console.error('Error generating model:', error);
-        toast.error('Failed to generate 3D model');
-        setIsLoading(false);
-      }
-    };
-
-    generateModel();
-  }, [imageTexture, scene, model, setModel, setIsLoading, setIsModelReady, loadAttempts]);
-
-  // Fallback model loader function
-  const tryFallbackModel = () => {
-    if (!scene || !imageTexture) return;
-    
-    console.log("Attempting to load fallback model");
-    
-    const loader = new GLTFLoader();
-    loader.load(
-      // Another common test model as fallback
-      'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/Duck/glTF/Duck.gltf',
-      (gltf) => {
-        const newModel = gltf.scene;
-        
-        // Center and scale the model
-        const box = new THREE.Box3().setFromObject(newModel);
-        const center = box.getCenter(new THREE.Vector3());
-        const size = box.getSize(new THREE.Vector3());
-        
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = 2 / maxDim;
-        newModel.scale.setScalar(scale);
-        
-        newModel.position.sub(center.multiplyScalar(scale));
-        
-        // Apply the uploaded image texture to the duck model
-        const material = new THREE.MeshStandardMaterial({
-          map: imageTexture,
-          roughness: 0.5,
-          metalness: 0.2
-        });
-        
-        newModel.traverse((node) => {
-          if (node instanceof THREE.Mesh) {
-            node.castShadow = true;
-            node.receiveShadow = true;
-            if (Array.isArray(node.material)) {
-              node.material = node.material.map(() => material.clone());
+    try {
+      // Calculate aspect ratio to maintain image proportions
+      const aspectRatio = texture.image.width / texture.image.height;
+      
+      // Create a plane geometry with the correct aspect ratio
+      const width = 3; // Base width
+      const height = width / aspectRatio;
+      
+      const geometry = new THREE.PlaneGeometry(width, height);
+      
+      // Create material with the loaded image texture
+      const material = new THREE.MeshStandardMaterial({
+        map: texture,
+        side: THREE.DoubleSide, // Visible from both sides
+        roughness: 0.4,
+        metalness: 0.3
+      });
+      
+      // Create the mesh with the geometry and material
+      const imagePlane = new THREE.Mesh(geometry, material);
+      
+      // Clean up any existing model
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh && object !== imagePlane) {
+          if (object.geometry) object.geometry.dispose();
+          if (object.material) {
+            if (Array.isArray(object.material)) {
+              object.material.forEach(material => material.dispose());
             } else {
-              node.material = material;
+              object.material.dispose();
             }
           }
-        });
-        
-        // Add the model to the scene
-        if (scene) {
-          scene.add(newModel);
-          setModel(newModel);
-          setIsModelReady(true);
-          toast.success('Fallback 3D Model loaded successfully');
         }
-        
-        setIsLoading(false);
-      },
-      undefined,
-      (error) => {
-        console.error('Fallback model failed to load:', error);
-        toast.error('Could not load any 3D model');
-        setIsLoading(false);
-      }
-    );
+      });
+      
+      scene.clear();
+      
+      // Add lights back to the scene
+      setupLights(scene);
+      
+      // Add the image plane to the scene
+      scene.add(imagePlane);
+      setModel(imagePlane);
+      setIsModelReady(true);
+      setIsLoading(false);
+      toast.success('3D Image created successfully');
+      
+    } catch (error) {
+      console.error('Error creating 3D image:', error);
+      toast.error('Failed to create 3D image');
+      setIsLoading(false);
+    }
+  };
+
+  // Setup lights for the scene
+  const setupLights = (scene: THREE.Scene) => {
+    // Create ambient light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+
+    // Create directional lights
+    const directionalLight1 = new THREE.DirectionalLight(0x8b5cf6, 1);
+    directionalLight1.position.set(2, 2, 2);
+    directionalLight1.castShadow = true;
+    scene.add(directionalLight1);
+
+    const directionalLight2 = new THREE.DirectionalLight(0xec4899, 1);
+    directionalLight2.position.set(-2, -2, 2);
+    scene.add(directionalLight2);
+
+    const directionalLight3 = new THREE.DirectionalLight(0x06b6d4, 1);
+    directionalLight3.position.set(0, 0, -5);
+    scene.add(directionalLight3);
   };
 
   return null;
