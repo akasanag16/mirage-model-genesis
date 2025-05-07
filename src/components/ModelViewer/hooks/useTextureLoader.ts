@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { toast } from 'sonner';
 
 /**
- * Custom hook for loading image textures
+ * Custom hook for loading high-quality image textures
  * @param imageUrl URL of the image to load
  * @param onTextureLoaded Callback when texture is successfully loaded
  * @param setIsLoading Function to update loading state
@@ -39,15 +39,24 @@ export const useTextureLoader = (
     const textureLoader = new THREE.TextureLoader();
     textureLoader.crossOrigin = "anonymous";
     
+    // Configure texture loader for high quality
     textureLoader.load(
       imageUrl,
       (texture) => {
         console.log("✅ Image texture loaded successfully for 3D model generation");
-        // Enable texture filtering for better quality
-        texture.minFilter = THREE.LinearFilter;
+        
+        // Enable high-quality texture filtering
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.magFilter = THREE.LinearFilter;
+        texture.anisotropy = 16; // Higher anisotropy for better quality at angles
+        
+        // Enable mipmapping for better performance at different distances
+        texture.generateMipmaps = true;
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 1);
+        
         setImageTexture(texture);
-        toast.success("Image loaded successfully");
+        toast.success("High-quality image loaded");
         onTextureLoaded(texture);
       },
       (xhr) => {

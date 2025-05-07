@@ -15,11 +15,12 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     setIsModelReady 
   } = useModelViewer();
   
-  // Use our custom hook to load the texture
+  // Use our enhanced texture loader for high-quality textures
   useTextureLoader(
     imageUrl,
     (texture) => {
       if (scene) {
+        // Generate high-quality 3D model from the texture
         createImagePlane(scene, texture, setModel, setIsModelReady, setIsLoading);
       }
     },
