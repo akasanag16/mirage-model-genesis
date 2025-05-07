@@ -13,8 +13,8 @@ const Index = () => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
 
   const handleImageUpload = (file: File, url: string) => {
-    console.log("Image uploaded:", file.name);
-    console.log("Image URL for 3D generation:", url);
+    console.log("Image uploaded for 3D model generation:", file.name);
+    console.log("Image URL for 3D model generation:", url);
     setUploadedImage(file);
     setImageUrl(url);
     toast.success(`Image "${file.name}" uploaded successfully!`);
@@ -28,10 +28,10 @@ const Index = () => {
       <main className="flex-1 container pt-24 pb-12">
         <section className="max-w-4xl mx-auto text-center mb-12 pt-8">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold gradient-text animate-pulse-glow">
-            2D to 3D Image Generator
+            2D to 3D Model Generator
           </h1>
           <p className="mt-6 text-xl text-muted-foreground max-w-2xl mx-auto">
-            Upload any image and watch as AI transforms it into an interactive 3D representation in seconds.
+            Upload any image and watch as AI transforms it into an interactive 3D model in seconds.
           </p>
         </section>
         
@@ -52,7 +52,7 @@ const Index = () => {
           </div>
           
           <div className="flex flex-col space-y-6">
-            <h2 className="text-2xl font-semibold text-white">Generated 3D Image</h2>
+            <h2 className="text-2xl font-semibold text-white">Generated 3D Model</h2>
             <ModelViewer 
               imageUrl={imageUrl} 
               className="min-h-[400px] h-full" 
@@ -85,7 +85,7 @@ const Index = () => {
       
       <footer className="py-6 border-t border-muted">
         <div className="container text-center text-sm text-muted-foreground">
-          <p>© {new Date().getFullYear()} 3D ImageGen. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} 3D ModelGen. All rights reserved.</p>
         </div>
       </footer>
     </div>

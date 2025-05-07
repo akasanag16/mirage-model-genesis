@@ -26,7 +26,7 @@ export const useTextureLoader = (
       return;
     }
 
-    console.log("Starting to load image texture from URL:", imageUrl);
+    console.log("Starting to load image for 3D model generation:", imageUrl);
     setIsLoading(true);
     setIsModelReady(false);
 
@@ -42,7 +42,10 @@ export const useTextureLoader = (
     textureLoader.load(
       imageUrl,
       (texture) => {
-        console.log("✅ Image texture loaded successfully");
+        console.log("✅ Image texture loaded successfully for 3D model generation");
+        // Enable texture filtering for better quality
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
         setImageTexture(texture);
         toast.success("Image loaded successfully");
         onTextureLoaded(texture);

@@ -25,12 +25,12 @@ export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
 
   const handleExportGLB = () => {
     exportAsGLB();
-    toast.success('Model exported as GLB');
+    toast.success('3D Model exported as GLB');
   };
 
   const handleExportGLTF = () => {
     exportAsGLTF();
-    toast.success('Model exported as GLTF');
+    toast.success('3D Model exported as GLTF');
   };
 
   return (
@@ -59,7 +59,7 @@ export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
                   <DropdownMenuTrigger asChild>
                     <Button variant="secondary" className="gradient-border shadow-lg" size="sm">
                       <Download className="mr-2 h-4 w-4" />
-                      Export Model
+                      Export 3D Model
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
