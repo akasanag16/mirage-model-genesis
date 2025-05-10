@@ -1,7 +1,10 @@
 
-import { Loader2, Download } from 'lucide-react';
+import { useState } from 'react';
+import { Loader2, Download, Settings } from 'lucide-react';
 import { useModelViewer } from './ModelViewerContext';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -14,6 +17,15 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@/components/ui/tooltip';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { toast } from 'sonner';
 
 interface ViewerUIProps {
@@ -22,6 +34,10 @@ interface ViewerUIProps {
 
 export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
   const { isLoading, isModelReady, exportAsGLB, exportAsGLTF } = useModelViewer();
+  const [meshyApiKey, setMeshyApiKey] = useState<string>(
+    localStorage.getItem('meshyApiKey') || ''
+  );
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const handleExportGLB = () => {
     exportAsGLB();
@@ -31,6 +47,17 @@ export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
   const handleExportGLTF = () => {
     exportAsGLTF();
     toast.success('3D Model exported as GLTF');
+  };
+  
+  const saveApiSettings = () => {
+    if (meshyApiKey) {
+      localStorage.setItem('meshyApiKey', meshyApiKey);
+      toast.success('API settings saved successfully');
+    } else {
+      localStorage.removeItem('meshyApiKey');
+      toast.info('Meshy API key removed');
+    }
+    setSettingsOpen(false);
   };
 
   return (
@@ -47,6 +74,47 @@ export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
       {!imageUrl && !isLoading && (
         <div className="absolute inset-0 flex items-center justify-center">
           <p className="text-lg text-muted-foreground">Upload an image to generate a 3D model</p>
+        </div>
+      )}
+
+      {!isLoading && (
+        <div className="absolute top-4 right-4">
+          <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="icon" className="rounded-full">
+                <Settings className="h-4 w-4" />
+                <span className="sr-only">Settings</span>
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>API Settings</DialogTitle>
+                <DialogDescription>
+                  Enter your API keys to enhance 3D model quality.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="meshy-api">Meshy AI API Key</Label>
+                  <Input
+                    id="meshy-api"
+                    placeholder="Enter Meshy AI API key"
+                    value={meshyApiKey}
+                    onChange={(e) => setMeshyApiKey(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Get your API key at <a href="https://www.meshy.ai" target="_blank" rel="noreferrer" className="text-primary hover:underline">www.meshy.ai</a>
+                  </p>
+                </div>
+              </div>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSettingsOpen(false)}>Cancel</Button>
+                <Button onClick={saveApiSettings}>Save Settings</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       )}
 
