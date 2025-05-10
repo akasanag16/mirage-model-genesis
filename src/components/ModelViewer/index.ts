@@ -8,3 +8,4 @@ export { createMapsFromTexture, applyAdvancedDisplacementToGeometry } from './ut
 export { smoothGeometry, createDetailedGeometry } from './utils/geometryUtils';
 export { createHighQualityMaterial, addEnvironmentMap } from './utils/materialUtils';
 export { cleanupScene } from './utils/sceneUtils';
+export { useHuggingFaceModel } from './hooks/useHuggingFaceModel';
