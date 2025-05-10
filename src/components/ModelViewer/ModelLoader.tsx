@@ -1,5 +1,6 @@
 
 import { useEffect } from 'react';
+import * as THREE from 'three';
 import { useModelViewer } from './ModelViewerContext';
 import { useTextureLoader } from './hooks/useTextureLoader';
 import { createImagePlane } from './utils/createImagePlane';
@@ -26,12 +27,19 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         // Clean up any existing models in the scene
         scene.children = scene.children.filter(child => {
           if (child.type === 'Mesh' || child.type === 'Group') {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach(material => material.dispose());
+            // Type guard to check if the object has geometry and material properties
+            if ((child as THREE.Mesh).geometry) {
+              ((child as THREE.Mesh).geometry as THREE.BufferGeometry).dispose();
+            }
+            
+            if ((child as THREE.Mesh).material) {
+              // Check if material is an array
+              if (Array.isArray((child as THREE.Mesh).material)) {
+                ((child as THREE.Mesh).material as THREE.Material[]).forEach(
+                  material => material.dispose()
+                );
               } else {
-                child.material.dispose();
+                ((child as THREE.Mesh).material as THREE.Material).dispose();
               }
             }
             return false;
