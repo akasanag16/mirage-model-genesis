@@ -10,3 +10,5 @@ export { createHighQualityMaterial, addEnvironmentMap } from './utils/materialUt
 export { cleanupScene } from './utils/sceneUtils';
 export { useHuggingFaceModel } from './hooks/useHuggingFaceModel';
 export { useMeshyAiModel } from './hooks/useMeshyAiModel';
+export { useRodinModel } from './hooks/useRodinModel';
+export { useCsmModel } from './hooks/useCsmModel';

@@ -6,6 +6,8 @@ import { useTextureLoader } from './hooks/useTextureLoader';
 import { createImagePlane } from './utils/createImagePlane';
 import { useHuggingFaceModel } from './hooks/useHuggingFaceModel';
 import { useMeshyAiModel } from './hooks/useMeshyAiModel';
+import { useRodinModel } from './hooks/useRodinModel';
+import { useCsmModel } from './hooks/useCsmModel';
 import { toast } from 'sonner';
 
 interface ModelLoaderProps {
@@ -15,6 +17,7 @@ interface ModelLoaderProps {
 export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
   // Optional API keys for 3D model generation services
   const [meshyApiKey, setMeshyApiKey] = useState<string | undefined>(undefined);
+  const [modelGenerationStatus, setModelGenerationStatus] = useState<string>('');
   
   const { 
     scene, 
@@ -31,19 +34,17 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     }
   }, []);
   
-  // Try to load a model using Meshy AI first (best quality)
+  // Try to load a model using Meshy AI first (highest quality, premium)
   const meshyAiModel = useMeshyAiModel(
     imageUrl,
     meshyApiKey,
     (model) => {
       if (scene && model) {
-        // Clean up any existing models in the scene
         cleanScene(scene);
-        
-        // Add the model to the scene
         scene.add(model);
         setModel(model);
         setIsModelReady(true);
+        setModelGenerationStatus('meshy');
         toast.success('Generated premium 3D model with Meshy AI');
       }
     },
@@ -51,34 +52,68 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     setIsModelReady
   );
   
-  // If Meshy AI fails or is not available, try Hugging Face next
-  const huggingFaceModel = useHuggingFaceModel(
+  // Try Rodin API next (high quality, free)
+  const rodinModel = useRodinModel(
     imageUrl,
     (model) => {
       // Only proceed if we don't have a Meshy model
       if (scene && model && !meshyAiModel) {
-        // Clean up any existing models in the scene
         cleanScene(scene);
-        
-        // Add the model to the scene
         scene.add(model);
         setModel(model);
         setIsModelReady(true);
-        toast.success('Generated high-quality 3D model with Hugging Face');
+        setModelGenerationStatus('rodin');
+        toast.success('Generated high-quality 3D model with Rodin AI');
       }
     },
     setIsLoading,
     setIsModelReady
   );
   
-  // Fallback to our enhanced texture loader if both APIs fail
+  // Try CSM API (good quality, free)
+  const csmModel = useCsmModel(
+    imageUrl,
+    (model) => {
+      // Only proceed if we don't have Meshy or Rodin models
+      if (scene && model && !meshyAiModel && !rodinModel) {
+        cleanScene(scene);
+        scene.add(model);
+        setModel(model);
+        setIsModelReady(true);
+        setModelGenerationStatus('csm');
+        toast.success('Generated quality 3D model with CSM AI');
+      }
+    },
+    setIsLoading,
+    setIsModelReady
+  );
+  
+  // Try improved Hugging Face models
+  const huggingFaceModel = useHuggingFaceModel(
+    imageUrl,
+    (model) => {
+      // Only proceed if we don't have models from premium APIs
+      if (scene && model && !meshyAiModel && !rodinModel && !csmModel) {
+        cleanScene(scene);
+        scene.add(model);
+        setModel(model);
+        setIsModelReady(true);
+        setModelGenerationStatus('huggingface');
+        toast.success('Generated 3D model with improved Hugging Face AI');
+      }
+    },
+    setIsLoading,
+    setIsModelReady
+  );
+  
+  // Fallback to enhanced local texture generation
   useTextureLoader(
     imageUrl,
     (texture) => {
-      // Only proceed with local generation if we don't have models from APIs
-      if (scene && !meshyAiModel && !huggingFaceModel) {
-        // Generate high-quality 3D model from the texture
+      // Only proceed with local generation if all APIs failed
+      if (scene && !meshyAiModel && !rodinModel && !csmModel && !huggingFaceModel) {
         createImagePlane(scene, texture, setModel, setIsModelReady, setIsLoading);
+        setModelGenerationStatus('local');
       }
     },
     setIsLoading,
@@ -88,7 +123,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
   // Display informative message about the model generation
   useEffect(() => {
     if (imageUrl) {
-      toast.info('AI 3D generation started - please wait a moment');
+      toast.info('Starting advanced AI 3D generation - using multiple APIs for best quality');
     }
   }, [imageUrl]);
   
