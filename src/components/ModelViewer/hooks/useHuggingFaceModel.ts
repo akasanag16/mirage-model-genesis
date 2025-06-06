@@ -10,29 +10,25 @@ import { toast } from 'sonner';
  * 
  * @param imageUrl URL of the image to transform
  * @param onModelLoaded Callback when model is successfully loaded
- * @param setIsLoading Function to update loading state
- * @param setIsModelReady Function to update model ready state
+ * @param onError Callback when an error occurs
+ * @param isActive Boolean to determine if this hook should be active
  */
 export const useHuggingFaceModel = (
   imageUrl: string | null,
   onModelLoaded: (model: THREE.Object3D) => void,
-  setIsLoading: (isLoading: boolean) => void,
-  setIsModelReady: (isReady: boolean) => void
+  onError: () => void,
+  isActive: boolean = true
 ) => {
   const [model, setModel] = useState<THREE.Object3D | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (!imageUrl) {
-      setIsLoading(false);
-      setIsModelReady(false);
+    if (!imageUrl || !isActive) {
       return;
     }
 
     let isMounted = true;
     const loadModelFromHuggingFace = async () => {
-      setIsLoading(true);
-      setIsModelReady(false);
       setError(null);
       
       try {
@@ -44,7 +40,7 @@ export const useHuggingFaceModel = (
         
         if (!modelData) {
           console.log('No model data received from Hugging Face, falling back to local generation');
-          setIsLoading(false);
+          onError();
           return false; // Signal to fall back to local generation
         }
         
@@ -129,8 +125,6 @@ export const useHuggingFaceModel = (
           // Set model and update state
           setModel(model);
           onModelLoaded(model);
-          setIsModelReady(true);
-          setIsLoading(false);
           
           // Clean up the blob URL
           URL.revokeObjectURL(modelUrl);
@@ -150,8 +144,8 @@ export const useHuggingFaceModel = (
           
           // Clean up the blob URL
           URL.revokeObjectURL(modelUrl);
-          setIsLoading(false);
           setError(error);
+          onError();
           return false;
         }
         
@@ -160,8 +154,8 @@ export const useHuggingFaceModel = (
         if (!isMounted) return;
         
         console.error('Error in Hugging Face model generation:', error);
-        setIsLoading(false);
         setError(error);
+        onError();
         return false;
       }
     };
@@ -187,7 +181,7 @@ export const useHuggingFaceModel = (
         });
       }
     };
-  }, [imageUrl, onModelLoaded, setIsLoading, setIsModelReady]);
+  }, [imageUrl, onModelLoaded, onError, isActive]);
 
   return model;
 };

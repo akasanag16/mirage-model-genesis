@@ -232,7 +232,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         setIsProcessing(false);
       }
     },
-    apiPriority[currentApiIndex] === 'rodin' // Add this fourth argument
+    apiPriority[currentApiIndex] === 'rodin' // isActive parameter
   );
   
   // CSM API (good quality, free)
@@ -250,7 +250,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         setIsProcessing(false);
       }
     },
-    apiPriority[currentApiIndex] === 'csm' // Add this fourth argument
+    apiPriority[currentApiIndex] === 'csm' // isActive parameter
   );
   
   // Improved Hugging Face models
@@ -268,7 +268,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         setIsProcessing(false);
       }
     },
-    apiPriority[currentApiIndex] === 'huggingface' // Add this fourth argument
+    apiPriority[currentApiIndex] === 'huggingface' // isActive parameter
   );
   
   // Enhanced fallback to local texture generation
@@ -283,7 +283,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
             onModelLoaded(model, 'local');
             setIsProcessing(false);
           },
-          setIsModelReady,
+          () => setIsModelReady(true), // Fixed: Pass a function that calls setIsModelReady
           () => {
             setCurrentApiIndex(prev => prev + 1);
             setIsProcessing(false);
@@ -297,8 +297,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         setIsProcessing(false);
       }
     },
-    setIsModelReady,
-    apiPriority[currentApiIndex] === 'local' // Add this fifth argument
+    apiPriority[currentApiIndex] === 'local' // isActive parameter
   );
 
   return null;
