@@ -35,9 +35,7 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
     // Create scene
     const newScene = new THREE.Scene();
     // Convert string or number to THREE.Color if needed
-    if (typeof backgroundColor === 'string') {
-      newScene.background = new THREE.Color(backgroundColor);
-    } else if (typeof backgroundColor === 'number') {
+    if (typeof backgroundColor === 'number') {
       newScene.background = new THREE.Color(backgroundColor);
     } else {
       newScene.background = backgroundColor;
@@ -91,9 +89,7 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
   useEffect(() => {
     if (scene) {
       // Convert string or number to THREE.Color if needed
-      if (typeof backgroundColor === 'string') {
-        scene.background = new THREE.Color(backgroundColor);
-      } else if (typeof backgroundColor === 'number') {
+      if (typeof backgroundColor === 'number') {
         scene.background = new THREE.Color(backgroundColor);
       } else {
         scene.background = backgroundColor;
@@ -184,7 +180,7 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
 
   const handleResize = () => {
     if (containerRef.current && camera && renderer) {
-      // Explicitly type check camera as PerspectiveCamera
+      // Ensure camera is a PerspectiveCamera before accessing aspect property
       if (camera instanceof THREE.PerspectiveCamera) {
         camera.aspect = containerRef.current.clientWidth / containerRef.current.clientHeight;
         camera.updateProjectionMatrix();
