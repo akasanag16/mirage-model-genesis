@@ -214,7 +214,8 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         setCurrentApiIndex(prev => prev + 1);
         setIsProcessing(false);
       }
-    }
+    },
+    apiPriority[currentApiIndex] === 'meshy' // isActive parameter
   );
   
   // Rodin API model generation (free, high quality)

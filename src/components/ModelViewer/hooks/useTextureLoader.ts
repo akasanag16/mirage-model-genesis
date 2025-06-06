@@ -7,28 +7,24 @@ import { toast } from 'sonner';
  * Custom hook for loading high-quality image textures
  * @param imageUrl URL of the image to load
  * @param onTextureLoaded Callback when texture is successfully loaded
- * @param setIsLoading Function to update loading state
- * @param setIsModelReady Function to update model ready state
+ * @param onError Callback when an error occurs
+ * @param isActive Boolean to determine if this hook should be active
  */
 export const useTextureLoader = (
   imageUrl: string | null,
   onTextureLoaded: (texture: THREE.Texture) => void,
-  setIsLoading: (isLoading: boolean) => void,
-  setIsModelReady: (isReady: boolean) => void
+  onError: () => void,
+  isActive: boolean = true
 ) => {
   const [imageTexture, setImageTexture] = useState<THREE.Texture | null>(null);
 
   // Load the image texture when imageUrl changes
   useEffect(() => {
-    if (!imageUrl) {
-      setIsLoading(false);
-      setIsModelReady(false);
+    if (!imageUrl || !isActive) {
       return;
     }
 
     console.log("Starting to load image for 3D model generation:", imageUrl);
-    setIsLoading(true);
-    setIsModelReady(false);
 
     // Clear previous texture
     if (imageTexture) {
@@ -66,7 +62,7 @@ export const useTextureLoader = (
         console.error("❌ Failed to load image texture:", error);
         toast.error("Failed to load image. Please try again with a different image.");
         setImageTexture(null);
-        setIsLoading(false);
+        onError();
       }
     );
 
@@ -76,7 +72,7 @@ export const useTextureLoader = (
         imageTexture.dispose();
       }
     };
-  }, [imageUrl, setIsLoading]);
+  }, [imageUrl, onTextureLoaded, onError, isActive]);
 
   return imageTexture;
 };

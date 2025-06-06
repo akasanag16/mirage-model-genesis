@@ -10,33 +10,33 @@ import { toast } from 'sonner';
  * 
  * @param imageUrl URL of the image to transform
  * @param onModelLoaded Callback when model is successfully loaded
- * @param setIsLoading Function to update loading state
- * @param setIsModelReady Function to update model ready state
+ * @param onError Callback when an error occurs
+ * @param isActive Boolean to determine if this hook should be active
  */
 export const useCsmModel = (
   imageUrl: string | null,
   onModelLoaded: (model: THREE.Object3D) => void,
-  setIsLoading: (isLoading: boolean) => void,
-  setIsModelReady: (isReady: boolean) => void
+  onError: () => void,
+  isActive: boolean = true
 ) => {
   const [model, setModel] = useState<THREE.Object3D | null>(null);
 
   useEffect(() => {
-    if (!imageUrl) {
+    if (!imageUrl || !isActive) {
       return;
     }
 
+    let isMounted = true;
     const loadModelFromCsm = async () => {
-      setIsLoading(true);
-      setIsModelReady(false);
-      
       try {
         // Attempt to generate a 3D model using CSM
         const modelData = await generateCsmModel(imageUrl);
         
+        if (!isMounted) return;
+        
         if (!modelData) {
           console.log('No model data received from CSM, falling back to alternatives');
-          setIsLoading(false);
+          onError();
           return false;
         }
         
@@ -49,6 +49,11 @@ export const useCsmModel = (
         loader.load(
           modelUrl,
           (gltf) => {
+            if (!isMounted) {
+              URL.revokeObjectURL(modelUrl);
+              return;
+            }
+            
             console.log('✅ CSM GLTF model loaded successfully');
             
             // Process the model
@@ -95,8 +100,6 @@ export const useCsmModel = (
             // Set model and update state
             setModel(model);
             onModelLoaded(model);
-            setIsModelReady(true);
-            setIsLoading(false);
             
             // Clean up the blob URL
             URL.revokeObjectURL(modelUrl);
@@ -107,9 +110,12 @@ export const useCsmModel = (
             console.log(`Loading CSM model: ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`);
           },
           (error) => {
+            if (!isMounted) return;
+            
             console.error('Error loading CSM GLTF model:', error);
             toast.error('Failed to load CSM 3D model. Trying alternatives.');
-            setIsLoading(false);
+            onError();
+            URL.revokeObjectURL(modelUrl);
             return false;
           }
         );
@@ -117,8 +123,10 @@ export const useCsmModel = (
         return true;
         
       } catch (error) {
+        if (!isMounted) return;
+        
         console.error('Error in CSM model generation:', error);
-        setIsLoading(false);
+        onError();
         return false;
       }
     };
@@ -126,6 +134,8 @@ export const useCsmModel = (
     loadModelFromCsm();
     
     return () => {
+      isMounted = false;
+      
       // Cleanup function
       if (model) {
         model.traverse((object) => {
@@ -142,7 +152,7 @@ export const useCsmModel = (
         });
       }
     };
-  }, [imageUrl, onModelLoaded, setIsLoading, setIsModelReady]);
+  }, [imageUrl, onModelLoaded, onError, isActive]);
 
   return model;
 };

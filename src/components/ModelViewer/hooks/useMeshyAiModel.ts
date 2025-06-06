@@ -11,34 +11,34 @@ import { toast } from 'sonner';
  * @param imageUrl URL of the image to transform
  * @param apiKey Optional Meshy AI API key
  * @param onModelLoaded Callback when model is successfully loaded
- * @param setIsLoading Function to update loading state
- * @param setIsModelReady Function to update model ready state
+ * @param onError Callback when an error occurs
+ * @param isActive Boolean to determine if this hook should be active
  */
 export const useMeshyAiModel = (
   imageUrl: string | null,
   apiKey: string | undefined,
   onModelLoaded: (model: THREE.Object3D) => void,
-  setIsLoading: (isLoading: boolean) => void,
-  setIsModelReady: (isReady: boolean) => void
+  onError: () => void,
+  isActive: boolean = true
 ) => {
   const [model, setModel] = useState<THREE.Object3D | null>(null);
 
   useEffect(() => {
-    if (!imageUrl || !apiKey) {
+    if (!imageUrl || !apiKey || !isActive) {
       return;
     }
 
+    let isMounted = true;
     const loadModelFromMeshyAi = async () => {
-      setIsLoading(true);
-      setIsModelReady(false);
-      
       try {
         // Attempt to generate a high-quality 3D model using Meshy AI
         const modelData = await generateMeshyModel(imageUrl, apiKey);
         
+        if (!isMounted) return;
+        
         if (!modelData) {
           console.log('No model data received from Meshy AI, falling back to alternatives');
-          setIsLoading(false);
+          onError();
           return false; // Signal to fall back to alternatives
         }
         
@@ -51,6 +51,11 @@ export const useMeshyAiModel = (
         loader.load(
           modelUrl,
           (gltf) => {
+            if (!isMounted) {
+              URL.revokeObjectURL(modelUrl);
+              return;
+            }
+            
             console.log('✅ High-quality Meshy AI GLTF model loaded successfully');
             
             // Process the model
@@ -98,8 +103,6 @@ export const useMeshyAiModel = (
             // Set model and update state
             setModel(model);
             onModelLoaded(model);
-            setIsModelReady(true);
-            setIsLoading(false);
             
             // Clean up the blob URL
             URL.revokeObjectURL(modelUrl);
@@ -110,9 +113,12 @@ export const useMeshyAiModel = (
             console.log(`Loading Meshy AI model: ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`);
           },
           (error) => {
+            if (!isMounted) return;
+            
             console.error('Error loading Meshy AI GLTF model:', error);
             toast.error('Failed to load Meshy AI 3D model. Trying alternatives.');
-            setIsLoading(false);
+            onError();
+            URL.revokeObjectURL(modelUrl);
             return false;
           }
         );
@@ -120,8 +126,10 @@ export const useMeshyAiModel = (
         return true;
         
       } catch (error) {
+        if (!isMounted) return;
+        
         console.error('Error in Meshy AI model generation:', error);
-        setIsLoading(false);
+        onError();
         return false;
       }
     };
@@ -134,6 +142,8 @@ export const useMeshyAiModel = (
     });
     
     return () => {
+      isMounted = false;
+      
       // Cleanup function
       if (model) {
         model.traverse((object) => {
@@ -150,7 +160,7 @@ export const useMeshyAiModel = (
         });
       }
     };
-  }, [imageUrl, apiKey, onModelLoaded, setIsLoading, setIsModelReady]);
+  }, [imageUrl, apiKey, onModelLoaded, onError, isActive]);
 
   return model;
 };
