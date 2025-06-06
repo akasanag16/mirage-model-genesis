@@ -231,7 +231,8 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         setCurrentApiIndex(prev => prev + 1);
         setIsProcessing(false);
       }
-    }
+    },
+    apiPriority[currentApiIndex] === 'rodin' // Add this fourth argument
   );
   
   // CSM API (good quality, free)
@@ -248,7 +249,8 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         setCurrentApiIndex(prev => prev + 1);
         setIsProcessing(false);
       }
-    }
+    },
+    apiPriority[currentApiIndex] === 'csm' // Add this fourth argument
   );
   
   // Improved Hugging Face models
@@ -265,7 +267,8 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         setCurrentApiIndex(prev => prev + 1);
         setIsProcessing(false);
       }
-    }
+    },
+    apiPriority[currentApiIndex] === 'huggingface' // Add this fourth argument
   );
   
   // Enhanced fallback to local texture generation
@@ -294,7 +297,8 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
         setIsProcessing(false);
       }
     },
-    setIsModelReady
+    setIsModelReady,
+    apiPriority[currentApiIndex] === 'local' // Add this fifth argument
   );
 
   return null;
