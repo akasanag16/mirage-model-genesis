@@ -1,5 +1,4 @@
-
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useModelViewer } from './ModelViewerContext';
 import { useTextureLoader } from './hooks/useTextureLoader';
@@ -18,12 +17,17 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
   // Optional API keys for 3D model generation services
   const [meshyApiKey, setMeshyApiKey] = useState<string | undefined>(undefined);
   const [modelGenerationStatus, setModelGenerationStatus] = useState<string>('');
+  const [retryAttempts, setRetryAttempts] = useState<number>(0);
+  const [apiPriority, setApiPriority] = useState<string[]>(
+    ['meshy', 'rodin', 'csm', 'huggingface', 'local']
+  );
   
   const { 
     scene, 
     setModel, 
     setIsLoading, 
-    setIsModelReady 
+    setIsModelReady, 
+    setModelSource
   } = useModelViewer();
   
   // Setup API keys from localStorage if available
@@ -32,125 +36,171 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     if (savedMeshyKey) {
       setMeshyApiKey(savedMeshyKey);
     }
+    
+    // Reset state when a new image is loaded
+    if (imageUrl) {
+      setModelGenerationStatus('');
+      setRetryAttempts(0);
+      
+      // Show informative toast about the process
+      toast.info(
+        'Starting 3D generation with multiple APIs for best quality. This may take a minute or two.',
+        { duration: 5000 }
+      );
+    }
+  }, [imageUrl]);
+  
+  // Clean up scene helper
+  const cleanScene = useCallback((scene: THREE.Scene) => {
+    // Remove existing meshes and models but keep lights and cameras
+    scene.children = scene.children.filter(child => {
+      if (child instanceof THREE.Mesh || (child instanceof THREE.Group && child.type !== 'Camera')) {
+        // Dispose materials and geometries to prevent memory leaks
+        if (child instanceof THREE.Mesh) {
+          if (child.geometry) {
+            child.geometry.dispose();
+          }
+          
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(material => material.dispose());
+            } else {
+              child.material.dispose();
+            }
+          }
+        } else if (child instanceof THREE.Group) {
+          // Also clean up meshes in groups
+          child.traverse((groupChild) => {
+            if ((groupChild as THREE.Mesh).geometry) {
+              ((groupChild as THREE.Mesh).geometry as THREE.BufferGeometry).dispose();
+            }
+            
+            if ((groupChild as THREE.Mesh).material) {
+              if (Array.isArray((groupChild as THREE.Mesh).material)) {
+                ((groupChild as THREE.Mesh).material as THREE.Material[]).forEach(
+                  material => material.dispose()
+                );
+              } else {
+                ((groupChild as THREE.Mesh).material as THREE.Material).dispose();
+              }
+            }
+          });
+        }
+        return false; // Remove this child
+      }
+      return true; // Keep lights, cameras, and other scene elements
+    });
   }, []);
   
-  // Try to load a model using Meshy AI first (highest quality, premium)
+  // Handle model ready state
+  const onModelLoaded = useCallback((model: THREE.Object3D, source: string) => {
+    if (scene) {
+      // Clean up existing models first
+      cleanScene(scene);
+      // Add the new model
+      scene.add(model);
+      // Update state
+      setModel(model);
+      setModelSource(source);
+      setIsModelReady(true);
+      setModelGenerationStatus(source);
+      
+      // Show success message based on source
+      let sourceMessage = '';
+      switch (source) {
+        case 'meshy':
+          sourceMessage = 'premium Meshy AI';
+          break;
+        case 'rodin':
+          sourceMessage = 'Rodin AI';
+          break;
+        case 'csm':
+          sourceMessage = 'CSM AI';
+          break;
+        case 'huggingface':
+          sourceMessage = 'Hugging Face';
+          break;
+        case 'local':
+          sourceMessage = 'local generation';
+          break;
+        default:
+          sourceMessage = source;
+      }
+      
+      toast.success(`Generated 3D model with ${sourceMessage}!`, {
+        duration: 5000
+      });
+    }
+  }, [scene, cleanScene, setModel, setIsModelReady, setModelSource]);
+  
+  // Meshy AI model generation (premium, highest quality)
   const meshyAiModel = useMeshyAiModel(
     imageUrl,
     meshyApiKey,
-    (model) => {
-      if (scene && model) {
-        cleanScene(scene);
-        scene.add(model);
-        setModel(model);
-        setIsModelReady(true);
-        setModelGenerationStatus('meshy');
-        toast.success('Generated premium 3D model with Meshy AI');
-      }
-    },
+    (model) => onModelLoaded(model, 'meshy'),
     setIsLoading,
     setIsModelReady
   );
   
-  // Try Rodin API next (high quality, free)
+  // Rodin API model generation (free, high quality)
   const rodinModel = useRodinModel(
     imageUrl,
     (model) => {
       // Only proceed if we don't have a Meshy model
-      if (scene && model && !meshyAiModel) {
-        cleanScene(scene);
-        scene.add(model);
-        setModel(model);
-        setIsModelReady(true);
-        setModelGenerationStatus('rodin');
-        toast.success('Generated high-quality 3D model with Rodin AI');
+      if (!meshyAiModel) {
+        onModelLoaded(model, 'rodin');
       }
     },
     setIsLoading,
     setIsModelReady
   );
   
-  // Try CSM API (good quality, free)
+  // CSM API (good quality, free)
   const csmModel = useCsmModel(
     imageUrl,
     (model) => {
       // Only proceed if we don't have Meshy or Rodin models
-      if (scene && model && !meshyAiModel && !rodinModel) {
-        cleanScene(scene);
-        scene.add(model);
-        setModel(model);
-        setIsModelReady(true);
-        setModelGenerationStatus('csm');
-        toast.success('Generated quality 3D model with CSM AI');
+      if (!meshyAiModel && !rodinModel) {
+        onModelLoaded(model, 'csm');
       }
     },
     setIsLoading,
     setIsModelReady
   );
   
-  // Try improved Hugging Face models
+  // Improved Hugging Face models
   const huggingFaceModel = useHuggingFaceModel(
     imageUrl,
     (model) => {
       // Only proceed if we don't have models from premium APIs
-      if (scene && model && !meshyAiModel && !rodinModel && !csmModel) {
-        cleanScene(scene);
-        scene.add(model);
-        setModel(model);
-        setIsModelReady(true);
-        setModelGenerationStatus('huggingface');
-        toast.success('Generated 3D model with improved Hugging Face AI');
+      if (!meshyAiModel && !rodinModel && !csmModel) {
+        onModelLoaded(model, 'huggingface');
       }
     },
     setIsLoading,
     setIsModelReady
   );
   
-  // Fallback to enhanced local texture generation
+  // Enhanced fallback to local texture generation
   useTextureLoader(
     imageUrl,
     (texture) => {
       // Only proceed with local generation if all APIs failed
-      if (scene && !meshyAiModel && !rodinModel && !csmModel && !huggingFaceModel) {
-        createImagePlane(scene, texture, setModel, setIsModelReady, setIsLoading);
-        setModelGenerationStatus('local');
+      if (!meshyAiModel && !rodinModel && !csmModel && !huggingFaceModel) {
+        if (scene) {
+          createImagePlane(
+            scene, 
+            texture, 
+            (model) => onModelLoaded(model, 'local'),
+            setIsModelReady,
+            setIsLoading
+          );
+        }
       }
     },
     setIsLoading,
     setIsModelReady
   );
-
-  // Display informative message about the model generation
-  useEffect(() => {
-    if (imageUrl) {
-      toast.info('Starting advanced AI 3D generation - using multiple APIs for best quality');
-    }
-  }, [imageUrl]);
-  
-  // Helper function to clean up the scene
-  const cleanScene = (scene: THREE.Scene) => {
-    scene.children = scene.children.filter(child => {
-      if (child.type === 'Mesh' || child.type === 'Group') {
-        // Type guard to check if the object has geometry and material properties
-        if ((child as THREE.Mesh).geometry) {
-          ((child as THREE.Mesh).geometry as THREE.BufferGeometry).dispose();
-        }
-        
-        if ((child as THREE.Mesh).material) {
-          // Check if material is an array
-          if (Array.isArray((child as THREE.Mesh).material)) {
-            ((child as THREE.Mesh).material as THREE.Material[]).forEach(
-              material => material.dispose()
-            );
-          } else {
-            ((child as THREE.Mesh).material as THREE.Material).dispose();
-          }
-        }
-        return false;
-      }
-      return true; // Keep lights and other scene elements
-    });
-  };
 
   return null;
 };

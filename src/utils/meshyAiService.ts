@@ -23,94 +23,195 @@ export async function generateMeshyModel(
 
   try {
     console.log('Generating detailed 3D model using Meshy AI');
-    toast.info('Starting Meshy AI 3D model generation...');
+    toast.loading('Processing with Meshy AI...', {
+      id: 'meshy-generation'
+    });
     
     // First we need to fetch the image as a blob
     const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) throw new Error('Failed to fetch image');
+    if (!imageResponse.ok) {
+      console.error(`Failed to fetch image for Meshy AI API: ${imageResponse.status}`);
+      toast.error('Failed to process image for Meshy AI', {
+        id: 'meshy-generation'
+      });
+      return null;
+    }
     
     const imageBlob = await imageResponse.blob();
     
-    // Prepare form data with the image
+    // Validate image data
+    if (imageBlob.size < 1000) {
+      console.error(`Image too small for Meshy AI API: ${imageBlob.size} bytes`);
+      toast.error('Image too small for processing with Meshy AI', {
+        id: 'meshy-generation'
+      });
+      return null;
+    }
+    
+    // Prepare form data with the image and enhanced parameters
     const formData = new FormData();
     formData.append('image', imageBlob, 'image.jpg');
     formData.append('type', 'textured-mesh');
+    formData.append('quality', 'high');
+    formData.append('detail', 'high');
     
-    // Make the request to Meshy AI API to start the generation job
-    const initiateResponse = await fetch(`${MESHY_API_URL}/image-to-3d`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: formData
-    });
+    // Set up API request with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout for premium service
     
-    if (!initiateResponse.ok) {
-      const errorText = await initiateResponse.text();
-      console.error('Meshy AI API error:', errorText);
-      throw new Error(`Failed to start 3D model generation: ${initiateResponse.statusText}`);
-    }
-    
-    // Get the job ID from the response
-    const initiateData = await initiateResponse.json();
-    const jobId = initiateData.id;
-    
-    // Poll for job completion
-    let modelUrl: string | null = null;
-    let attempts = 0;
-    const maxAttempts = 30; // Maximum polling attempts (30 * 2 seconds = 60 seconds max)
-    
-    while (attempts < maxAttempts && !modelUrl) {
-      // Wait 2 seconds between polling attempts
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Check job status
-      const statusResponse = await fetch(`${MESHY_API_URL}/image-to-3d/${jobId}`, {
-        method: 'GET',
+    try {
+      // Make the request to Meshy AI API to start the generation job
+      const initiateResponse = await fetch(`${MESHY_API_URL}/image-to-3d`, {
+        method: 'POST',
+        signal: controller.signal,
         headers: {
-          'Authorization': `Bearer ${apiKey}`
-        }
+          'Authorization': `Bearer ${apiKey}`,
+          'Accept': 'application/json'
+        },
+        body: formData
       });
       
-      if (!statusResponse.ok) {
-        const errorText = await statusResponse.text();
-        console.error('Meshy AI status check error:', errorText);
-        throw new Error(`Failed to check 3D model status: ${statusResponse.statusText}`);
+      clearTimeout(timeoutId);
+      
+      if (!initiateResponse.ok) {
+        // Handle common API key errors
+        if (initiateResponse.status === 401) {
+          console.error('Meshy AI API error: Invalid API key');
+          toast.error('Invalid Meshy AI API key. Please check your settings.', {
+            id: 'meshy-generation',
+            duration: 5000
+          });
+          return null;
+        }
+        
+        const errorText = await initiateResponse.text();
+        console.error('Meshy AI API error:', errorText);
+        toast.error('Failed to start Meshy AI generation', {
+          id: 'meshy-generation'
+        });
+        return null;
       }
       
-      const statusData = await statusResponse.json();
+      // Get the job ID from the response
+      const initiateData = await initiateResponse.json();
+      const jobId = initiateData.id;
       
-      // Check if the job is completed
-      if (statusData.status === 'completed') {
-        modelUrl = statusData.output?.glb;
-        break;
-      } else if (statusData.status === 'failed') {
-        throw new Error('Meshy AI model generation failed');
+      if (!jobId) {
+        console.error('No job ID received from Meshy AI API');
+        toast.error('Invalid response from Meshy AI', {
+          id: 'meshy-generation'
+        });
+        return null;
       }
       
-      attempts++;
-      console.log(`Waiting for Meshy AI model generation... (${attempts}/${maxAttempts})`);
+      // Poll for job completion with progress updates
+      let modelUrl: string | null = null;
+      let attempts = 0;
+      const maxAttempts = 35; // Premium service gets more polling attempts
+      
+      while (attempts < maxAttempts && !modelUrl) {
+        // Wait between polling attempts
+        const waitTime = Math.min(2000 + attempts * 300, 5000);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        
+        // Update progress toast
+        const progress = Math.min(Math.round((attempts / maxAttempts) * 100), 95);
+        toast.loading(`Meshy AI generation: ${progress}% complete`, {
+          id: 'meshy-generation'
+        });
+        
+        // Check job status
+        const statusResponse = await fetch(`${MESHY_API_URL}/image-to-3d/${jobId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (!statusResponse.ok) {
+          console.error(`Meshy AI status check error: ${statusResponse.status}`);
+          attempts++;
+          continue;
+        }
+        
+        const statusData = await statusResponse.json();
+        
+        // Check if the job is completed
+        if (statusData.status === 'completed' && statusData.output?.glb) {
+          modelUrl = statusData.output.glb;
+          break;
+        } else if (statusData.status === 'failed') {
+          console.error('Meshy AI model generation failed:', statusData.error || 'Unknown error');
+          toast.error('Meshy AI model generation failed', {
+            id: 'meshy-generation'
+          });
+          return null;
+        }
+        
+        attempts++;
+      }
+      
+      if (!modelUrl) {
+        console.error(`Meshy AI model generation timed out after ${maxAttempts} attempts`);
+        toast.error('Meshy AI generation timed out', {
+          id: 'meshy-generation'
+        });
+        return null;
+      }
+      
+      // Enhanced model validation and download
+      const modelResponse = await fetch(modelUrl);
+      if (!modelResponse.ok) {
+        console.error(`Failed to download model from Meshy AI: ${modelResponse.status}`);
+        toast.error('Failed to download Meshy AI model', {
+          id: 'meshy-generation'
+        });
+        return null;
+      }
+      
+      // Get the model data
+      const modelData = await modelResponse.arrayBuffer();
+      
+      // Validate model data
+      if (modelData.byteLength < 5000) {
+        console.error(`Meshy AI returned invalid model data: ${modelData.byteLength} bytes`);
+        toast.error('Invalid model data from Meshy AI', {
+          id: 'meshy-generation'
+        });
+        return null;
+      }
+      
+      console.log('✅ Successfully generated premium 3D model from Meshy AI');
+      toast.success('Meshy AI model generated successfully!', {
+        id: 'meshy-generation'
+      });
+      
+      return modelData;
+      
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (error.name === 'AbortError') {
+        console.error('Meshy AI API request timed out');
+        toast.error('Meshy AI request timed out', {
+          id: 'meshy-generation'
+        });
+        return null;
+      }
+      
+      console.error('Error in Meshy AI API request:', error);
+      toast.error('Meshy AI request failed', {
+        id: 'meshy-generation'
+      });
+      return null;
     }
     
-    if (!modelUrl) {
-      throw new Error('Meshy AI model generation timed out');
-    }
-    
-    // Download the GLB model
-    const modelResponse = await fetch(modelUrl);
-    if (!modelResponse.ok) {
-      throw new Error('Failed to download model from Meshy AI');
-    }
-    
-    // Response will be the 3D model data
-    const modelData = await modelResponse.arrayBuffer();
-    console.log('✅ Successfully generated high-quality 3D model from Meshy AI');
-    toast.success('Meshy AI 3D model generated successfully!');
-    
-    return modelData;
   } catch (error) {
     console.error('Error generating 3D model with Meshy AI:', error);
-    toast.error('Failed to generate Meshy AI 3D model. Trying alternative methods.');
+    toast.error('Meshy AI generation failed. Trying alternative methods.', {
+      id: 'meshy-generation'
+    });
     return null;
   }
 }

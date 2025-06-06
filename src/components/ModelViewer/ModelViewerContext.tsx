@@ -1,107 +1,95 @@
 
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useRef } from 'react';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
 import { exportModelAsGLB, exportModelAsGLTF } from './exportUtils';
 
-interface ModelViewerContextType {
+type ModelViewerContextType = {
   scene: THREE.Scene | null;
-  camera: THREE.PerspectiveCamera | null;
-  renderer: THREE.WebGLRenderer | null;
-  controls: OrbitControls | null;
-  model: THREE.Object3D | null;
-  frameId: number;
-  isLoading: boolean;
-  isModelReady: boolean;
-  mousePosition: { x: number; y: number };
-  backgroundColor: THREE.Color;
   setScene: (scene: THREE.Scene) => void;
-  setCamera: (camera: THREE.PerspectiveCamera) => void;
+  camera: THREE.Camera | null;
+  setCamera: (camera: THREE.Camera) => void;
+  renderer: THREE.WebGLRenderer | null;
   setRenderer: (renderer: THREE.WebGLRenderer) => void;
+  controls: OrbitControls | null;
   setControls: (controls: OrbitControls) => void;
-  setModel: (model: THREE.Object3D | null) => void;
-  setFrameId: (frameId: number) => void;
+  model: THREE.Object3D | null;
+  setModel: (model: THREE.Object3D) => void;
+  isLoading: boolean;
   setIsLoading: (isLoading: boolean) => void;
-  setIsModelReady: (isModelReady: boolean) => void;
-  setMousePosition: (position: { x: number; y: number }) => void;
-  setBackgroundColor: (color: THREE.Color | string | number) => void;
-  exportAsGLB: (fileName?: string) => void;
-  exportAsGLTF: (fileName?: string) => void;
-}
+  isModelReady: boolean;
+  setIsModelReady: (isReady: boolean) => void;
+  modelSource: string;
+  setModelSource: (source: string) => void;
+  backgroundColor: string | number;
+  setBackgroundColor: (color: string | number) => void;
+  exportAsGLB: () => void;
+  exportAsGLTF: () => void;
+};
 
 const ModelViewerContext = createContext<ModelViewerContextType | undefined>(undefined);
 
-export const ModelViewerProvider: React.FC<{ 
-  children: React.ReactNode; 
+interface ModelViewerProviderProps {
+  children: React.ReactNode;
   initialBackgroundColor?: string | number;
-}> = ({ children, initialBackgroundColor = 0x111827 }) => {
+}
+
+export const ModelViewerProvider: React.FC<ModelViewerProviderProps> = ({ 
+  children, 
+  initialBackgroundColor = 0x111111 
+}) => {
   const [scene, setScene] = useState<THREE.Scene | null>(null);
-  const [camera, setCamera] = useState<THREE.PerspectiveCamera | null>(null);
+  const [camera, setCamera] = useState<THREE.Camera | null>(null);
   const [renderer, setRenderer] = useState<THREE.WebGLRenderer | null>(null);
   const [controls, setControls] = useState<OrbitControls | null>(null);
   const [model, setModel] = useState<THREE.Object3D | null>(null);
-  const [frameId, setFrameId] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isModelReady, setIsModelReady] = useState<boolean>(false);
-  const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [backgroundColor, setBackgroundColorState] = useState<THREE.Color>(
-    new THREE.Color(initialBackgroundColor)
-  );
+  const [modelSource, setModelSource] = useState<string>('');
+  const [backgroundColor, setBackgroundColor] = useState<string | number>(initialBackgroundColor);
 
-  // Handle background color updates
-  const setBackgroundColor = (color: THREE.Color | string | number) => {
-    const newColor = color instanceof THREE.Color ? color : new THREE.Color(color);
-    setBackgroundColorState(newColor);
-    
-    // Update scene background if it exists
-    if (scene) {
-      scene.background = newColor;
+  const exportAsGLB = () => {
+    if (model && scene) {
+      exportModelAsGLB(model, scene);
     }
   };
 
-  // Export model as GLB
-  const exportAsGLB = (fileName = 'model') => {
-    exportModelAsGLB(model, fileName);
-  };
-
-  // Export model as GLTF
-  const exportAsGLTF = (fileName = 'model') => {
-    exportModelAsGLTF(model, fileName);
-  };
-
-  const value = {
-    scene,
-    camera,
-    renderer,
-    controls,
-    model,
-    frameId,
-    isLoading,
-    isModelReady,
-    mousePosition,
-    backgroundColor,
-    setScene,
-    setCamera,
-    setRenderer,
-    setControls,
-    setModel,
-    setFrameId,
-    setIsLoading,
-    setIsModelReady,
-    setMousePosition,
-    setBackgroundColor,
-    exportAsGLB,
-    exportAsGLTF
+  const exportAsGLTF = () => {
+    if (model && scene) {
+      exportModelAsGLTF(model, scene);
+    }
   };
 
   return (
-    <ModelViewerContext.Provider value={value}>
+    <ModelViewerContext.Provider value={{
+      scene,
+      setScene,
+      camera,
+      setCamera,
+      renderer,
+      setRenderer,
+      controls,
+      setControls,
+      model,
+      setModel,
+      isLoading,
+      setIsLoading,
+      isModelReady,
+      setIsModelReady,
+      modelSource,
+      setModelSource,
+      backgroundColor,
+      setBackgroundColor,
+      exportAsGLB,
+      exportAsGLTF
+    }}>
       {children}
     </ModelViewerContext.Provider>
   );
 };
 
-export const useModelViewer = (): ModelViewerContextType => {
+export const useModelViewer = () => {
   const context = useContext(ModelViewerContext);
   if (context === undefined) {
     throw new Error('useModelViewer must be used within a ModelViewerProvider');

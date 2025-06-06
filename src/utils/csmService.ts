@@ -15,78 +15,197 @@ export async function generateCsmModel(
 ): Promise<ArrayBuffer | null> {
   try {
     console.log('Generating 3D model using CSM API');
-    toast.info('Starting CSM AI 3D model generation...');
+    toast.loading('Processing with CSM AI...', {
+      id: 'csm-generation'
+    });
     
     // First we need to fetch the image as a blob
     const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) throw new Error('Failed to fetch image');
+    if (!imageResponse.ok) {
+      console.error(`Failed to fetch image for CSM API: ${imageResponse.status}`);
+      toast.error('Failed to process image for CSM AI', {
+        id: 'csm-generation'
+      });
+      return null;
+    }
     
     const imageBlob = await imageResponse.blob();
     
-    // Prepare form data with the image
+    // Validate image data
+    if (imageBlob.size < 1000) {
+      console.error(`Image too small for CSM API: ${imageBlob.size} bytes`);
+      toast.error('Image too small for processing with CSM AI', {
+        id: 'csm-generation'
+      });
+      return null;
+    }
+    
+    // Prepare form data with the image and enhanced parameters
     const formData = new FormData();
     formData.append('image', imageBlob, 'image.jpg');
     formData.append('workflow', 'image_to_3d');
     formData.append('output_format', 'glb');
+    formData.append('quality', 'high');
+    formData.append('detail', 'high');
     
-    // Make the request to CSM API
-    const response = await fetch(`${CSM_API_URL}/image-to-3d`, {
-      method: 'POST',
-      body: formData
-    });
+    // Set up API request with timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('CSM API error:', errorText);
-      throw new Error(`Failed to generate 3D model: ${response.statusText}`);
-    }
-    
-    // Get the response data
-    const responseData = await response.json();
-    
-    if (responseData.status === 'processing') {
-      // Poll for completion if processing
-      const taskId = responseData.task_id;
-      let attempts = 0;
-      const maxAttempts = 15;
+    try {
+      // Make the request to CSM API
+      const response = await fetch(`${CSM_API_URL}/image-to-3d`, {
+        method: 'POST',
+        signal: controller.signal,
+        body: formData
+      });
       
-      while (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 4000));
-        
-        const statusResponse = await fetch(`${CSM_API_URL}/task/${taskId}`);
-        const statusData = await statusResponse.json();
-        
-        if (statusData.status === 'completed' && statusData.output_url) {
-          const modelResponse = await fetch(statusData.output_url);
-          const modelData = await modelResponse.arrayBuffer();
-          
-          console.log('✅ Successfully generated 3D model from CSM AI');
-          toast.success('CSM AI 3D model generated successfully!');
-          return modelData;
-        } else if (statusData.status === 'failed') {
-          throw new Error('CSM AI model generation failed');
-        }
-        
-        attempts++;
-        console.log(`Waiting for CSM AI model generation... (${attempts}/${maxAttempts})`);
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('CSM API error:', errorText);
+        toast.error('Failed to start CSM AI generation', {
+          id: 'csm-generation'
+        });
+        return null;
       }
       
-      throw new Error('CSM AI model generation timed out');
-    } else if (responseData.output_url) {
-      // Direct response with model URL
-      const modelResponse = await fetch(responseData.output_url);
-      const modelData = await modelResponse.arrayBuffer();
+      // Get the response data
+      const responseData = await response.json();
       
-      console.log('✅ Successfully generated 3D model from CSM AI');
-      toast.success('CSM AI 3D model generated successfully!');
-      return modelData;
-    } else {
-      throw new Error('Unexpected response from CSM API');
+      if (responseData.status === 'processing') {
+        // Poll for completion if processing
+        const taskId = responseData.task_id;
+        let attempts = 0;
+        const maxAttempts = 20;
+        
+        while (attempts < maxAttempts) {
+          // Wait with increasing intervals
+          const waitTime = Math.min(3000 + attempts * 500, 6000);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          
+          // Update progress toast
+          const progress = Math.min(Math.round((attempts / maxAttempts) * 100), 95);
+          toast.loading(`CSM AI generation: ${progress}% complete`, {
+            id: 'csm-generation'
+          });
+          
+          const statusResponse = await fetch(`${CSM_API_URL}/task/${taskId}`);
+          
+          if (!statusResponse.ok) {
+            console.error(`CSM API status check error: ${statusResponse.status}`);
+            attempts++;
+            continue;
+          }
+          
+          const statusData = await statusResponse.json();
+          
+          if (statusData.status === 'completed' && statusData.output_url) {
+            // Validate and download the model
+            const modelResponse = await fetch(statusData.output_url);
+            
+            if (!modelResponse.ok) {
+              console.error(`Failed to download model from CSM AI: ${modelResponse.status}`);
+              toast.error('Failed to download CSM AI model', {
+                id: 'csm-generation'
+              });
+              return null;
+            }
+            
+            const modelData = await modelResponse.arrayBuffer();
+            
+            // Validate model data
+            if (modelData.byteLength < 5000) {
+              console.error(`CSM AI returned invalid model data: ${modelData.byteLength} bytes`);
+              toast.error('Invalid model data from CSM AI', {
+                id: 'csm-generation'
+              });
+              return null;
+            }
+            
+            console.log('✅ Successfully generated 3D model from CSM AI');
+            toast.success('CSM AI model generated successfully!', {
+              id: 'csm-generation'
+            });
+            
+            return modelData;
+          } else if (statusData.status === 'failed') {
+            console.error('CSM AI model generation failed:', statusData.error || 'Unknown error');
+            toast.error('CSM AI model generation failed', {
+              id: 'csm-generation'
+            });
+            return null;
+          }
+          
+          attempts++;
+        }
+        
+        console.error(`CSM AI model generation timed out after ${maxAttempts} attempts`);
+        toast.error('CSM AI generation timed out', {
+          id: 'csm-generation'
+        });
+        return null;
+      } else if (responseData.output_url) {
+        // Direct response with model URL
+        const modelResponse = await fetch(responseData.output_url);
+        
+        if (!modelResponse.ok) {
+          console.error(`Failed to download model from CSM AI: ${modelResponse.status}`);
+          toast.error('Failed to download CSM AI model', {
+            id: 'csm-generation'
+          });
+          return null;
+        }
+        
+        const modelData = await modelResponse.arrayBuffer();
+        
+        // Validate model data
+        if (modelData.byteLength < 5000) {
+          console.error(`CSM AI returned invalid model data: ${modelData.byteLength} bytes`);
+          toast.error('Invalid model data from CSM AI', {
+            id: 'csm-generation'
+          });
+          return null;
+        }
+        
+        console.log('✅ Successfully generated 3D model from CSM AI');
+        toast.success('CSM AI model generated successfully!', {
+          id: 'csm-generation'
+        });
+        
+        return modelData;
+      } else {
+        console.error('Unexpected response from CSM API:', responseData);
+        toast.error('Unexpected response from CSM AI', {
+          id: 'csm-generation'
+        });
+        return null;
+      }
+      
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (error.name === 'AbortError') {
+        console.error('CSM API request timed out');
+        toast.error('CSM AI request timed out', {
+          id: 'csm-generation'
+        });
+        return null;
+      }
+      
+      console.error('Error in CSM API request:', error);
+      toast.error('CSM AI request failed', {
+        id: 'csm-generation'
+      });
+      return null;
     }
     
   } catch (error) {
     console.error('Error generating 3D model with CSM AI:', error);
-    toast.error('CSM AI generation failed. Trying next method...');
+    toast.error('CSM AI generation failed. Trying next method.', {
+      id: 'csm-generation'
+    });
     return null;
   }
 }

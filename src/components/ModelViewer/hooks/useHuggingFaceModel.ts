@@ -20,6 +20,7 @@ export const useHuggingFaceModel = (
   setIsModelReady: (isReady: boolean) => void
 ) => {
   const [model, setModel] = useState<THREE.Object3D | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (!imageUrl) {
@@ -28,13 +29,18 @@ export const useHuggingFaceModel = (
       return;
     }
 
+    let isMounted = true;
     const loadModelFromHuggingFace = async () => {
       setIsLoading(true);
       setIsModelReady(false);
+      setError(null);
       
       try {
         // Attempt to generate a high-quality 3D model using Hugging Face
         const modelData = await generate3DModelFromImage(imageUrl);
+        
+        // If component unmounted during async operation, abort
+        if (!isMounted) return;
         
         if (!modelData) {
           console.log('No model data received from Hugging Face, falling back to local generation');
@@ -46,94 +52,125 @@ export const useHuggingFaceModel = (
         const blob = new Blob([modelData], { type: 'model/gltf-binary' });
         const modelUrl = URL.createObjectURL(blob);
         
-        // Load the model using GLTFLoader
+        // Load the model using GLTFLoader with timeout
         const loader = new GLTFLoader();
-        loader.load(
-          modelUrl,
-          (gltf) => {
-            console.log('✅ High-quality GLTF model loaded successfully');
-            
-            // Process the model
-            const model = gltf.scene;
-            
-            // Apply enhanced materials to all meshes
-            model.traverse((child) => {
-              if (child instanceof THREE.Mesh) {
-                if (child.material) {
-                  // Enhance material quality
-                  if (child.material instanceof THREE.MeshStandardMaterial) {
-                    child.material.roughness = 0.4;
-                    child.material.metalness = 0.6;
-                    child.material.envMapIntensity = 1.2;
-                    // Add subtle color enhancement
-                    child.material.emissive = new THREE.Color(0x111111);
-                  }
-                  
-                  // Enable shadows
-                  child.castShadow = true;
-                  child.receiveShadow = true;
-                }
-              }
-            });
-            
-            // Calculate bounding box for proper scaling
-            const box = new THREE.Box3().setFromObject(model);
-            const size = box.getSize(new THREE.Vector3());
-            const maxDim = Math.max(size.x, size.y, size.z);
-            
-            // Scale to reasonable size
-            if (maxDim > 0) {
-              const scale = 2.5 / maxDim; // Adjusted for better visibility
-              model.scale.set(scale, scale, scale);
-            }
-            
-            // Center the model
-            box.setFromObject(model);
-            box.getCenter(model.position);
-            model.position.multiplyScalar(-1);
-            
-            // Add a slight rotation for better initial view
-            model.rotation.y = Math.PI / 8;
-            
-            // Set model and update state
-            setModel(model);
-            onModelLoaded(model);
-            setIsModelReady(true);
-            setIsLoading(false);
-            
-            // Clean up the blob URL
-            URL.revokeObjectURL(modelUrl);
-            
-            return true;
-          },
-          (xhr) => {
-            console.log(`Loading model: ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`);
-          },
-          (error) => {
-            console.error('Error loading GLTF model:', error);
-            toast.error('Failed to load 3D model. Falling back to local generation.');
-            setIsLoading(false);
-            return false;
-          }
-        );
         
-        return true;
+        // Set up timeout for model loading
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Model loading timed out')), 30000);
+        });
+        
+        const loadingPromise = new Promise<THREE.Group>((resolve, reject) => {
+          loader.load(
+            modelUrl,
+            (gltf) => resolve(gltf.scene),
+            (xhr) => {
+              console.log(`Loading Hugging Face model: ${(xhr.loaded / xhr.total * 100).toFixed(2)}%`);
+            },
+            (error) => reject(error)
+          );
+        });
+        
+        try {
+          // Race between loading and timeout
+          const gltfScene = await Promise.race([loadingPromise, timeoutPromise]);
+          
+          // If component unmounted during async operation, abort
+          if (!isMounted) {
+            URL.revokeObjectURL(modelUrl);
+            return;
+          }
+          
+          console.log('✅ Hugging Face GLTF model loaded successfully');
+          
+          // Process the model
+          const model = gltfScene;
+          
+          // Apply enhanced materials to all meshes
+          model.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              if (child.material) {
+                // Enhance material quality
+                if (child.material instanceof THREE.MeshStandardMaterial) {
+                  // Enhanced material properties for Hugging Face models
+                  child.material.roughness = 0.4;
+                  child.material.metalness = 0.6;
+                  child.material.envMapIntensity = 1.3;
+                  // Add subtle color enhancement
+                  child.material.emissive = new THREE.Color(0x141414);
+                }
+                
+                // Enable shadows
+                child.castShadow = true;
+                child.receiveShadow = true;
+              }
+            }
+          });
+          
+          // Calculate bounding box for proper scaling
+          const box = new THREE.Box3().setFromObject(model);
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z);
+          
+          // Scale to reasonable size
+          if (maxDim > 0) {
+            const scale = 2.5 / maxDim; // Adjusted for better visibility
+            model.scale.set(scale, scale, scale);
+          }
+          
+          // Center the model
+          box.setFromObject(model);
+          box.getCenter(model.position);
+          model.position.multiplyScalar(-1);
+          
+          // Add a slight rotation for better initial view
+          model.rotation.y = Math.PI / 6;
+          
+          // Set model and update state
+          setModel(model);
+          onModelLoaded(model);
+          setIsModelReady(true);
+          setIsLoading(false);
+          
+          // Clean up the blob URL
+          URL.revokeObjectURL(modelUrl);
+          
+          return true;
+        } catch (error) {
+          // If component unmounted during async operation, abort
+          if (!isMounted) return;
+          
+          if (error.message === 'Model loading timed out') {
+            console.error('Loading Hugging Face model timed out');
+            toast.error('Loading Hugging Face model timed out. Falling back to local generation.');
+          } else {
+            console.error('Error loading Hugging Face GLTF model:', error);
+            toast.error('Failed to load Hugging Face model. Falling back to local generation.');
+          }
+          
+          // Clean up the blob URL
+          URL.revokeObjectURL(modelUrl);
+          setIsLoading(false);
+          setError(error);
+          return false;
+        }
         
       } catch (error) {
+        // If component unmounted during async operation, abort
+        if (!isMounted) return;
+        
         console.error('Error in Hugging Face model generation:', error);
         setIsLoading(false);
+        setError(error);
         return false;
       }
     };
     
-    loadModelFromHuggingFace().then(success => {
-      // If Hugging Face model loading fails, we let the fallback happen naturally
-      if (!success) {
-        console.log('Falling back to local 3D generation');
-      }
-    });
+    loadModelFromHuggingFace();
     
     return () => {
+      isMounted = false;
+      
       // Cleanup function
       if (model) {
         model.traverse((object) => {
