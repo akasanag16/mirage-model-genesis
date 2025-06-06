@@ -34,7 +34,14 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
 
     // Create scene
     const newScene = new THREE.Scene();
-    newScene.background = backgroundColor;
+    // Convert string or number to THREE.Color if needed
+    if (typeof backgroundColor === 'string') {
+      newScene.background = new THREE.Color(backgroundColor);
+    } else if (typeof backgroundColor === 'number') {
+      newScene.background = new THREE.Color(backgroundColor);
+    } else {
+      newScene.background = backgroundColor;
+    }
     setScene(newScene);
 
     // Create camera
@@ -83,7 +90,14 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
   // Handle background color changes
   useEffect(() => {
     if (scene) {
-      scene.background = backgroundColor;
+      // Convert string or number to THREE.Color if needed
+      if (typeof backgroundColor === 'string') {
+        scene.background = new THREE.Color(backgroundColor);
+      } else if (typeof backgroundColor === 'number') {
+        scene.background = new THREE.Color(backgroundColor);
+      } else {
+        scene.background = backgroundColor;
+      }
     }
   }, [backgroundColor, scene]);
 
@@ -115,10 +129,11 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
 
     // Animation loop
     const animate = () => {
-      animationRef.current = requestAnimationFrame(animate);
+      const frameIdValue = requestAnimationFrame(animate);
+      animationRef.current = frameIdValue;
 
       // Apply interactive movement based on mouse position if model exists
-      if (model && isModelReady) {
+      if (model && isModelReady && mousePosition) {
         // Apply rotation based on mouse position
         const targetRotationY = mousePosition.x * 0.5;
         const targetRotationX = mousePosition.y * 0.5;
@@ -169,9 +184,12 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
 
   const handleResize = () => {
     if (containerRef.current && camera && renderer) {
-      camera.aspect = containerRef.current.clientWidth / containerRef.current.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+      // Explicitly type check camera as PerspectiveCamera
+      if (camera instanceof THREE.PerspectiveCamera) {
+        camera.aspect = containerRef.current.clientWidth / containerRef.current.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
+      }
     }
   };
 

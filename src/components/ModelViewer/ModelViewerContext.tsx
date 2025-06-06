@@ -8,8 +8,8 @@ import { exportModelAsGLB, exportModelAsGLTF } from './exportUtils';
 type ModelViewerContextType = {
   scene: THREE.Scene | null;
   setScene: (scene: THREE.Scene) => void;
-  camera: THREE.Camera | null;
-  setCamera: (camera: THREE.Camera) => void;
+  camera: THREE.PerspectiveCamera | null;
+  setCamera: (camera: THREE.PerspectiveCamera) => void;
   renderer: THREE.WebGLRenderer | null;
   setRenderer: (renderer: THREE.WebGLRenderer) => void;
   controls: OrbitControls | null;
@@ -22,8 +22,12 @@ type ModelViewerContextType = {
   setIsModelReady: (isReady: boolean) => void;
   modelSource: string;
   setModelSource: (source: string) => void;
-  backgroundColor: string | number;
-  setBackgroundColor: (color: string | number) => void;
+  backgroundColor: THREE.Color | number;
+  setBackgroundColor: (color: THREE.Color | number) => void;
+  mousePosition: { x: number; y: number };
+  setMousePosition: (position: { x: number; y: number }) => void;
+  frameId: number | null;
+  setFrameId: (id: number | null) => void;
   exportAsGLB: () => void;
   exportAsGLTF: () => void;
 };
@@ -32,7 +36,7 @@ const ModelViewerContext = createContext<ModelViewerContextType | undefined>(und
 
 interface ModelViewerProviderProps {
   children: React.ReactNode;
-  initialBackgroundColor?: string | number;
+  initialBackgroundColor?: THREE.Color | number;
 }
 
 export const ModelViewerProvider: React.FC<ModelViewerProviderProps> = ({ 
@@ -40,24 +44,26 @@ export const ModelViewerProvider: React.FC<ModelViewerProviderProps> = ({
   initialBackgroundColor = 0x111111 
 }) => {
   const [scene, setScene] = useState<THREE.Scene | null>(null);
-  const [camera, setCamera] = useState<THREE.Camera | null>(null);
+  const [camera, setCamera] = useState<THREE.PerspectiveCamera | null>(null);
   const [renderer, setRenderer] = useState<THREE.WebGLRenderer | null>(null);
   const [controls, setControls] = useState<OrbitControls | null>(null);
   const [model, setModel] = useState<THREE.Object3D | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isModelReady, setIsModelReady] = useState<boolean>(false);
   const [modelSource, setModelSource] = useState<string>('');
-  const [backgroundColor, setBackgroundColor] = useState<string | number>(initialBackgroundColor);
+  const [backgroundColor, setBackgroundColor] = useState<THREE.Color | number>(initialBackgroundColor);
+  const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [frameId, setFrameId] = useState<number | null>(null);
 
   const exportAsGLB = () => {
     if (model && scene) {
-      exportModelAsGLB(model, scene);
+      exportModelAsGLB(model);
     }
   };
 
   const exportAsGLTF = () => {
     if (model && scene) {
-      exportModelAsGLTF(model, scene);
+      exportModelAsGLTF(model);
     }
   };
 
@@ -81,6 +87,10 @@ export const ModelViewerProvider: React.FC<ModelViewerProviderProps> = ({
       setModelSource,
       backgroundColor,
       setBackgroundColor,
+      mousePosition,
+      setMousePosition,
+      frameId,
+      setFrameId,
       exportAsGLB,
       exportAsGLTF
     }}>
