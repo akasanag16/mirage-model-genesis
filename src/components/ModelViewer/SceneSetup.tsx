@@ -23,18 +23,23 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
     model,
     isModelReady,
     mousePosition,
-    backgroundColor
+    backgroundColor,
+    cleanupScene
   } = useModelViewer();
 
-  const animationRef = useRef<number>(0);
+  const animationRef = useRef<number | null>(null);
+  const isInitializedRef = useRef<boolean>(false);
 
-  // Initialize scene
+  // Initialize scene - only once
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || isInitializedRef.current) return;
+    
+    isInitializedRef.current = true;
+    console.log('Initializing 3D scene');
 
     // Create scene
     const newScene = new THREE.Scene();
-    // Convert string or number to THREE.Color if needed
+    // Convert number to THREE.Color
     if (typeof backgroundColor === 'number') {
       newScene.background = new THREE.Color(backgroundColor);
     } else {
@@ -52,13 +57,14 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
     newCamera.position.z = 5;
     setCamera(newCamera);
 
-    // Create renderer
+    // Create renderer - with memory leak prevention
     const newRenderer = new THREE.WebGLRenderer({ 
       antialias: true,
       alpha: true,
+      powerPreference: 'high-performance'
     });
     newRenderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
-    newRenderer.setPixelRatio(window.devicePixelRatio);
+    newRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio for performance
     newRenderer.shadowMap.enabled = true;
     newRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
     containerRef.current.appendChild(newRenderer.domElement);
@@ -75,12 +81,34 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
     setupLights(newScene);
 
     // Handle window resize
-    window.addEventListener('resize', handleResize);
+    const handleResizeEvent = () => handleResize();
+    window.addEventListener('resize', handleResizeEvent);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      console.log('Cleaning up 3D scene');
+      window.removeEventListener('resize', handleResizeEvent);
+      
+      // Stop animation loop
+      if (animationRef.current !== null) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      
+      // Clean up renderer and remove from DOM
       if (newRenderer && containerRef.current) {
-        containerRef.current.removeChild(newRenderer.domElement);
+        // Force renderer to dispose all resources
+        newRenderer.forceContextLoss();
+        newRenderer.dispose();
+        
+        // Remove from DOM
+        if (containerRef.current.contains(newRenderer.domElement)) {
+          containerRef.current.removeChild(newRenderer.domElement);
+        }
+      }
+      
+      // Dispose all controls
+      if (newControls) {
+        newControls.dispose();
       }
     };
   }, []);
@@ -88,7 +116,7 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
   // Handle background color changes
   useEffect(() => {
     if (scene) {
-      // Convert string or number to THREE.Color if needed
+      // Convert number to THREE.Color
       if (typeof backgroundColor === 'number') {
         scene.background = new THREE.Color(backgroundColor);
       } else {
@@ -97,9 +125,11 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
     }
   }, [backgroundColor, scene]);
 
-  // Setup animation loop
+  // Setup animation loop - with proper cleanup and single animation frame management
   useEffect(() => {
-    if (!scene || !camera || !renderer) return;
+    if (!scene || !camera || !renderer || animationRef.current !== null) return;
+
+    console.log('Setting up animation loop');
 
     // Add event listeners for interaction
     const handleMouseMove = (event: MouseEvent) => {
@@ -123,38 +153,57 @@ export const SceneSetup: React.FC<SceneSetupProps> = ({ containerRef }) => {
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('deviceorientation', handleDeviceOrientation);
 
-    // Animation loop
-    const animate = () => {
-      const frameIdValue = requestAnimationFrame(animate);
-      animationRef.current = frameIdValue;
-
-      // Apply interactive movement based on mouse position if model exists
-      if (model && isModelReady && mousePosition) {
-        // Apply rotation based on mouse position
-        const targetRotationY = mousePosition.x * 0.5;
-        const targetRotationX = mousePosition.y * 0.5;
+    // Animation loop with throttling for performance
+    let lastFrameTime = 0;
+    const targetFPS = 60;
+    const frameInterval = 1000 / targetFPS;
+    
+    const animate = (timestamp: number) => {
+      // Throttle frames for consistent performance
+      const elapsed = timestamp - lastFrameTime;
+      
+      if (elapsed > frameInterval) {
+        lastFrameTime = timestamp - (elapsed % frameInterval);
         
-        model.rotation.y += (targetRotationY - model.rotation.y) * 0.05;
-        model.rotation.x += (targetRotationX - model.rotation.x) * 0.05;
-        
-        // Add floating animation
-        model.position.y = Math.sin(Date.now() * 0.001) * 0.1;
-      }
+        // Apply interactive movement based on mouse position if model exists
+        if (model && isModelReady && mousePosition) {
+          // Apply rotation based on mouse position
+          const targetRotationY = mousePosition.x * 0.5;
+          const targetRotationX = mousePosition.y * 0.5;
+          
+          model.rotation.y += (targetRotationY - model.rotation.y) * 0.05;
+          model.rotation.x += (targetRotationX - model.rotation.x) * 0.05;
+          
+          // Add floating animation
+          model.position.y = Math.sin(Date.now() * 0.001) * 0.1;
+        }
 
-      if (controls) controls.update();
-      if (renderer && scene && camera) {
-        renderer.render(scene, camera);
+        if (controls) controls.update();
+        if (renderer && scene && camera) {
+          renderer.render(scene, camera);
+        }
       }
+      
+      // Only continue the loop if we haven't been unmounted
+      if (!animationRef.current) return;
+      animationRef.current = requestAnimationFrame(animate);
     };
 
-    animate();
+    // Start the animation loop
+    animationRef.current = requestAnimationFrame(animate);
     setFrameId(animationRef.current);
 
     // Cleanup
     return () => {
+      console.log('Cleaning up animation and event listeners');
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('deviceorientation', handleDeviceOrientation);
-      cancelAnimationFrame(animationRef.current);
+      
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+        setFrameId(null);
+      }
     };
   }, [scene, camera, renderer, controls, model, isModelReady, mousePosition]);
 

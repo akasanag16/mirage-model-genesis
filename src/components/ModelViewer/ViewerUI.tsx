@@ -1,6 +1,6 @@
 
-import { useState } from 'react';
-import { Loader2, Download, Settings, Info, RotateCcw, Repeat, Award } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Loader2, Download, Settings, Info, RotateCcw, Repeat, Award, X } from 'lucide-react';
 import { useModelViewer } from './ModelViewerContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,7 +40,12 @@ export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
     isModelReady, 
     exportAsGLB, 
     exportAsGLTF,
-    modelSource 
+    modelSource,
+    cancelAllRequests,
+    cleanupScene,
+    apiPriority,
+    setApiPriority,
+    activeApi
   } = useModelViewer();
   
   const [meshyApiKey, setMeshyApiKey] = useState<string>(
@@ -49,6 +54,32 @@ export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
   
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [retryLoading, setRetryLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  
+  // Simulated progress for better user experience
+  useEffect(() => {
+    let intervalId: number;
+    
+    if (isLoading) {
+      setProgress(10); // Start at 10%
+      
+      intervalId = window.setInterval(() => {
+        setProgress(prevProgress => {
+          // Slower progress increase as we get higher
+          if (prevProgress < 30) return prevProgress + 3;
+          if (prevProgress < 60) return prevProgress + 2;
+          if (prevProgress < 85) return prevProgress + 0.5;
+          return prevProgress;
+        });
+      }, 1000);
+    } else {
+      setProgress(0);
+    }
+    
+    return () => {
+      if (intervalId) window.clearInterval(intervalId);
+    };
+  }, [isLoading]);
 
   const handleExportGLB = () => {
     exportAsGLB();
@@ -72,8 +103,34 @@ export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
   };
   
   const handleRetry = () => {
-    // Force page refresh to retry model generation
-    window.location.reload();
+    setRetryLoading(true);
+    
+    // Clean up existing model and scene
+    cleanupScene();
+    
+    // Force page refresh
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
+  };
+  
+  const handleCancel = () => {
+    cancelAllRequests();
+    cleanupScene();
+    toast.info('3D Generation cancelled');
+  };
+  
+  const getApiStatus = (apiName: string): string => {
+    if (activeApi === apiName) return 'Processing...';
+    if (modelSource === apiName) return 'Success';
+    
+    const apiIndex = apiPriority.indexOf(apiName);
+    const currentApiIndex = apiPriority.indexOf(activeApi || '');
+    
+    if (apiIndex < currentApiIndex) return 'Failed';
+    if (apiIndex > currentApiIndex) return 'Waiting...';
+    
+    return 'Waiting...';
   };
   
   const getModelSourceBadge = () => {
@@ -125,35 +182,86 @@ export const ViewerUI: React.FC<ViewerUIProps> = ({ imageUrl }) => {
       {isLoading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="flex flex-col items-center space-y-6 max-w-md px-6">
-            <Loader2 className="h-12 w-12 text-neon-purple animate-spin" />
+            <div className="relative">
+              <Loader2 className="h-12 w-12 text-neon-purple animate-spin" />
+              {activeApi && (
+                <Button 
+                  variant="destructive"
+                  size="icon" 
+                  className="h-6 w-6 absolute -top-2 -right-2 rounded-full" 
+                  onClick={handleCancel}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
+            
             <div className="space-y-2 w-full">
               <p className="text-lg font-medium gradient-text text-center">
                 Generating High-Quality 3D Model
               </p>
-              <Progress value={45} className="h-2 w-full" />
+              <Progress value={progress} className="h-2 w-full" />
               <p className="text-sm text-muted-foreground text-center">
-                This may take 1-2 minutes. Multiple AI services are being tried for best results.
+                Trying multiple AI services in sequence for best results
               </p>
             </div>
             
             <div className="flex flex-col gap-2 w-full">
-              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-black/30">
-                <span className="text-xs">Meshy AI (Premium)</span>
-                <span className="text-xs text-muted-foreground">{meshyApiKey ? 'Trying...' : 'Skipped (No API key)'}</span>
+              <div className={`flex items-center justify-between px-3 py-2 rounded-md ${activeApi === 'meshy' ? 'bg-primary/20' : 'bg-black/30'}`}>
+                <span className="text-xs flex items-center">
+                  <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 mr-2 h-5 w-5 flex items-center justify-center p-0">1</Badge>
+                  Meshy AI (Premium)
+                </span>
+                <span className={`text-xs ${activeApi === 'meshy' ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {meshyApiKey ? getApiStatus('meshy') : 'Skipped (No API key)'}
+                </span>
               </div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-black/30">
-                <span className="text-xs">Rodin AI</span>
-                <span className="text-xs text-muted-foreground">Trying...</span>
+              <div className={`flex items-center justify-between px-3 py-2 rounded-md ${activeApi === 'rodin' ? 'bg-primary/20' : 'bg-black/30'}`}>
+                <span className="text-xs flex items-center">
+                  <Badge className="bg-blue-500 mr-2 h-5 w-5 flex items-center justify-center p-0">2</Badge>
+                  Rodin AI
+                </span>
+                <span className={`text-xs ${activeApi === 'rodin' ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {getApiStatus('rodin')}
+                </span>
               </div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-black/30">
-                <span className="text-xs">CSM AI</span>
-                <span className="text-xs text-muted-foreground">Waiting...</span>
+              <div className={`flex items-center justify-between px-3 py-2 rounded-md ${activeApi === 'csm' ? 'bg-primary/20' : 'bg-black/30'}`}>
+                <span className="text-xs flex items-center">
+                  <Badge className="bg-green-500 mr-2 h-5 w-5 flex items-center justify-center p-0">3</Badge>
+                  CSM AI
+                </span>
+                <span className={`text-xs ${activeApi === 'csm' ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {getApiStatus('csm')}
+                </span>
               </div>
-              <div className="flex items-center justify-between px-3 py-2 rounded-md bg-black/30">
-                <span className="text-xs">Hugging Face</span>
-                <span className="text-xs text-muted-foreground">Waiting...</span>
+              <div className={`flex items-center justify-between px-3 py-2 rounded-md ${activeApi === 'huggingface' ? 'bg-primary/20' : 'bg-black/30'}`}>
+                <span className="text-xs flex items-center">
+                  <Badge className="bg-yellow-500 mr-2 h-5 w-5 flex items-center justify-center p-0">4</Badge>
+                  Hugging Face
+                </span>
+                <span className={`text-xs ${activeApi === 'huggingface' ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {getApiStatus('huggingface')}
+                </span>
+              </div>
+              <div className={`flex items-center justify-between px-3 py-2 rounded-md ${activeApi === 'local' ? 'bg-primary/20' : 'bg-black/30'}`}>
+                <span className="text-xs flex items-center">
+                  <Badge className="bg-gray-500 mr-2 h-5 w-5 flex items-center justify-center p-0">5</Badge>
+                  Local Fallback
+                </span>
+                <span className={`text-xs ${activeApi === 'local' ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {getApiStatus('local')}
+                </span>
               </div>
             </div>
+            
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleCancel}
+              className="mt-2"
+            >
+              Cancel Generation
+            </Button>
           </div>
         </div>
       )}

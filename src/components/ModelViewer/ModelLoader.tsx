@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+
+import { useEffect, useState, useCallback, useRef } from 'react';
 import * as THREE from 'three';
 import { useModelViewer } from './ModelViewerContext';
 import { useTextureLoader } from './hooks/useTextureLoader';
@@ -17,17 +18,20 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
   // Optional API keys for 3D model generation services
   const [meshyApiKey, setMeshyApiKey] = useState<string | undefined>(undefined);
   const [modelGenerationStatus, setModelGenerationStatus] = useState<string>('');
-  const [retryAttempts, setRetryAttempts] = useState<number>(0);
-  const [apiPriority, setApiPriority] = useState<string[]>(
-    ['meshy', 'rodin', 'csm', 'huggingface', 'local']
-  );
+  const [currentApiIndex, setCurrentApiIndex] = useState<number>(0);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const previousImageRef = useRef<string | null>(null);
   
   const { 
     scene, 
     setModel, 
     setIsLoading, 
     setIsModelReady, 
-    setModelSource
+    setModelSource,
+    cleanupScene,
+    cancelAllRequests,
+    apiPriority,
+    setActiveApi
   } = useModelViewer();
   
   // Setup API keys from localStorage if available
@@ -37,168 +41,259 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
       setMeshyApiKey(savedMeshyKey);
     }
     
-    // Reset state when a new image is loaded
-    if (imageUrl) {
+    return () => {
+      // Always clean up when component unmounts
+      cancelAllRequests();
+    };
+  }, [cancelAllRequests]);
+
+  // Reset state when a new image is loaded
+  useEffect(() => {
+    if (imageUrl && imageUrl !== previousImageRef.current) {
+      console.log('New image detected, starting 3D generation process');
+      previousImageRef.current = imageUrl;
+      
+      // Clean up previous model and scene
+      cleanupScene();
+      
+      // Cancel any pending API requests
+      cancelAllRequests();
+      
+      // Reset state
       setModelGenerationStatus('');
-      setRetryAttempts(0);
+      setCurrentApiIndex(0);
+      setIsProcessing(false);
       
       // Show informative toast about the process
       toast.info(
-        'Starting 3D generation with multiple APIs for best quality. This may take a minute or two.',
-        { duration: 5000 }
+        'Starting 3D generation with sequential API processing for best quality',
+        { duration: 5000, id: 'api-progress' }
       );
+      
+      // Start loading indicator
+      setIsLoading(true);
     }
-  }, [imageUrl]);
-  
-  // Clean up scene helper
-  const cleanScene = useCallback((scene: THREE.Scene) => {
-    // Remove existing meshes and models but keep lights and cameras
-    scene.children = scene.children.filter(child => {
-      if (child instanceof THREE.Mesh || (child instanceof THREE.Group && child.type !== 'Camera')) {
-        // Dispose materials and geometries to prevent memory leaks
-        if (child instanceof THREE.Mesh) {
-          if (child.geometry) {
-            child.geometry.dispose();
-          }
-          
-          if (child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach(material => material.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        } else if (child instanceof THREE.Group) {
-          // Also clean up meshes in groups
-          child.traverse((groupChild) => {
-            if ((groupChild as THREE.Mesh).geometry) {
-              ((groupChild as THREE.Mesh).geometry as THREE.BufferGeometry).dispose();
-            }
-            
-            if ((groupChild as THREE.Mesh).material) {
-              if (Array.isArray((groupChild as THREE.Mesh).material)) {
-                ((groupChild as THREE.Mesh).material as THREE.Material[]).forEach(
-                  material => material.dispose()
-                );
-              } else {
-                ((groupChild as THREE.Mesh).material as THREE.Material).dispose();
-              }
-            }
+    
+    // Clean up when component unmounts or image changes
+    return () => {
+      if (imageUrl !== previousImageRef.current) {
+        cancelAllRequests();
+      }
+    };
+  }, [imageUrl, cleanupScene, cancelAllRequests, setIsLoading]);
+
+  // Sequential API processing with priority
+  useEffect(() => {
+    const processNextApi = async () => {
+      if (!imageUrl || isProcessing || !scene) return;
+      
+      // If we've tried all APIs, show fallback
+      if (currentApiIndex >= apiPriority.length) {
+        setIsLoading(false);
+        
+        if (!modelGenerationStatus) {
+          toast.error('All 3D generation methods failed. Please try a different image.', { 
+            id: 'api-progress', 
+            duration: 5000 
           });
         }
-        return false; // Remove this child
+        return;
       }
-      return true; // Keep lights, cameras, and other scene elements
-    });
-  }, []);
+      
+      // Get the next API to try
+      const apiToTry = apiPriority[currentApiIndex];
+      console.log(`Trying API ${currentApiIndex + 1}/${apiPriority.length}: ${apiToTry}`);
+      
+      // Update active API for UI
+      setActiveApi(apiToTry);
+      setIsProcessing(true);
+      
+      // Skip Meshy if no API key
+      if (apiToTry === 'meshy' && !meshyApiKey) {
+        console.log('Skipping Meshy AI (no API key)');
+        setCurrentApiIndex(prev => prev + 1);
+        setIsProcessing(false);
+        return;
+      }
+      
+      // Update toast with current API
+      toast.loading(`Processing with ${getApiDisplayName(apiToTry)}...`, {
+        id: 'api-progress'
+      });
+      
+      try {
+        let modelGenerated = false;
+        
+        // Try the current API
+        switch (apiToTry) {
+          case 'meshy':
+            // Will be handled by the custom hook
+            break;
+          case 'rodin':
+            // Will be handled by the custom hook
+            break;
+          case 'csm':
+            // Will be handled by the custom hook
+            break;
+          case 'huggingface':
+            // Will be handled by the custom hook
+            break;
+          case 'local':
+            // Process local texture generation (fallback)
+            // Handled separately below
+            break;
+        }
+        
+        // Move to next API if this one fails
+        setTimeout(() => {
+          if (!modelGenerated && apiToTry !== 'local') {
+            console.log(`${apiToTry} API timed out or failed to respond in time, trying next API`);
+            setCurrentApiIndex(prev => prev + 1);
+            setIsProcessing(false);
+          }
+        }, 30000); // 30 second timeout before moving to next API
+        
+      } catch (error) {
+        console.error(`Error with ${apiToTry} API:`, error);
+        // Move to next API
+        setCurrentApiIndex(prev => prev + 1);
+        setIsProcessing(false);
+      }
+    };
+    
+    processNextApi();
+  }, [imageUrl, currentApiIndex, isProcessing, scene, apiPriority, meshyApiKey, setIsLoading, setActiveApi]);
   
   // Handle model ready state
   const onModelLoaded = useCallback((model: THREE.Object3D, source: string) => {
     if (scene) {
-      // Clean up existing models first
-      cleanScene(scene);
       // Add the new model
+      cleanupScene();
       scene.add(model);
+      
       // Update state
       setModel(model);
       setModelSource(source);
       setIsModelReady(true);
+      setIsLoading(false);
       setModelGenerationStatus(source);
+      setActiveApi(null);
       
-      // Show success message based on source
-      let sourceMessage = '';
-      switch (source) {
-        case 'meshy':
-          sourceMessage = 'premium Meshy AI';
-          break;
-        case 'rodin':
-          sourceMessage = 'Rodin AI';
-          break;
-        case 'csm':
-          sourceMessage = 'CSM AI';
-          break;
-        case 'huggingface':
-          sourceMessage = 'Hugging Face';
-          break;
-        case 'local':
-          sourceMessage = 'local generation';
-          break;
-        default:
-          sourceMessage = source;
-      }
-      
-      toast.success(`Generated 3D model with ${sourceMessage}!`, {
+      // Show success message
+      toast.success(`Generated 3D model with ${getApiDisplayName(source)}!`, {
+        id: 'api-progress',
         duration: 5000
       });
     }
-  }, [scene, cleanScene, setModel, setIsModelReady, setModelSource]);
+  }, [scene, cleanupScene, setModel, setIsModelReady, setIsLoading, setModelSource, setActiveApi]);
+  
+  // Helper function to get display name for APIs
+  const getApiDisplayName = (apiKey: string): string => {
+    switch (apiKey) {
+      case 'meshy': return 'premium Meshy AI';
+      case 'rodin': return 'Rodin AI';
+      case 'csm': return 'CSM AI';
+      case 'huggingface': return 'Hugging Face';
+      case 'local': return 'local generation';
+      default: return apiKey;
+    }
+  };
   
   // Meshy AI model generation (premium, highest quality)
-  const meshyAiModel = useMeshyAiModel(
+  useMeshyAiModel(
     imageUrl,
     meshyApiKey,
-    (model) => onModelLoaded(model, 'meshy'),
-    setIsLoading,
-    setIsModelReady
+    (model) => {
+      if (apiPriority[currentApiIndex] === 'meshy') {
+        onModelLoaded(model, 'meshy');
+        setIsProcessing(false);
+      }
+    },
+    () => {
+      if (apiPriority[currentApiIndex] === 'meshy') {
+        setCurrentApiIndex(prev => prev + 1);
+        setIsProcessing(false);
+      }
+    }
   );
   
   // Rodin API model generation (free, high quality)
-  const rodinModel = useRodinModel(
+  useRodinModel(
     imageUrl,
     (model) => {
-      // Only proceed if we don't have a Meshy model
-      if (!meshyAiModel) {
+      if (apiPriority[currentApiIndex] === 'rodin') {
         onModelLoaded(model, 'rodin');
+        setIsProcessing(false);
       }
     },
-    setIsLoading,
-    setIsModelReady
+    () => {
+      if (apiPriority[currentApiIndex] === 'rodin') {
+        setCurrentApiIndex(prev => prev + 1);
+        setIsProcessing(false);
+      }
+    }
   );
   
   // CSM API (good quality, free)
-  const csmModel = useCsmModel(
+  useCsmModel(
     imageUrl,
     (model) => {
-      // Only proceed if we don't have Meshy or Rodin models
-      if (!meshyAiModel && !rodinModel) {
+      if (apiPriority[currentApiIndex] === 'csm') {
         onModelLoaded(model, 'csm');
+        setIsProcessing(false);
       }
     },
-    setIsLoading,
-    setIsModelReady
+    () => {
+      if (apiPriority[currentApiIndex] === 'csm') {
+        setCurrentApiIndex(prev => prev + 1);
+        setIsProcessing(false);
+      }
+    }
   );
   
   // Improved Hugging Face models
-  const huggingFaceModel = useHuggingFaceModel(
+  useHuggingFaceModel(
     imageUrl,
     (model) => {
-      // Only proceed if we don't have models from premium APIs
-      if (!meshyAiModel && !rodinModel && !csmModel) {
+      if (apiPriority[currentApiIndex] === 'huggingface') {
         onModelLoaded(model, 'huggingface');
+        setIsProcessing(false);
       }
     },
-    setIsLoading,
-    setIsModelReady
+    () => {
+      if (apiPriority[currentApiIndex] === 'huggingface') {
+        setCurrentApiIndex(prev => prev + 1);
+        setIsProcessing(false);
+      }
+    }
   );
   
   // Enhanced fallback to local texture generation
   useTextureLoader(
     imageUrl,
     (texture) => {
-      // Only proceed with local generation if all APIs failed
-      if (!meshyAiModel && !rodinModel && !csmModel && !huggingFaceModel) {
-        if (scene) {
-          createImagePlane(
-            scene, 
-            texture, 
-            (model) => onModelLoaded(model, 'local'),
-            setIsModelReady,
-            setIsLoading
-          );
-        }
+      if (apiPriority[currentApiIndex] === 'local' && scene) {
+        createImagePlane(
+          scene, 
+          texture, 
+          (model) => {
+            onModelLoaded(model, 'local');
+            setIsProcessing(false);
+          },
+          setIsModelReady,
+          () => {
+            setCurrentApiIndex(prev => prev + 1);
+            setIsProcessing(false);
+          }
+        );
       }
     },
-    setIsLoading,
+    () => {
+      if (apiPriority[currentApiIndex] === 'local') {
+        setCurrentApiIndex(prev => prev + 1);
+        setIsProcessing(false);
+      }
+    },
     setIsModelReady
   );
 

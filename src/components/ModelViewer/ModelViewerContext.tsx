@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useRef } from 'react';
+import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFExporter } from 'three/examples/jsm/exporters/GLTFExporter.js';
@@ -30,6 +30,12 @@ type ModelViewerContextType = {
   setFrameId: (id: number | null) => void;
   exportAsGLB: () => void;
   exportAsGLTF: () => void;
+  cleanupScene: () => void;
+  cancelAllRequests: () => void;
+  apiPriority: string[];
+  setApiPriority: (priority: string[]) => void;
+  activeApi: string | null;
+  setActiveApi: (api: string | null) => void;
 };
 
 const ModelViewerContext = createContext<ModelViewerContextType | undefined>(undefined);
@@ -54,18 +60,68 @@ export const ModelViewerProvider: React.FC<ModelViewerProviderProps> = ({
   const [backgroundColor, setBackgroundColor] = useState<THREE.Color | number>(initialBackgroundColor);
   const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [frameId, setFrameId] = useState<number | null>(null);
+  const [apiPriority, setApiPriority] = useState<string[]>(['meshy', 'rodin', 'csm', 'huggingface', 'local']);
+  const [activeApi, setActiveApi] = useState<string | null>(null);
+  
+  // Store abort controllers for API requests
+  const abortControllersRef = useRef<Map<string, AbortController>>(new Map());
 
-  const exportAsGLB = () => {
+  const cleanupScene = useCallback(() => {
+    if (scene && model) {
+      console.log('Cleaning up scene and models');
+      
+      // First remove the model from the scene
+      scene.remove(model);
+      
+      // Recursively dispose geometries and materials
+      model.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          if (child.geometry) {
+            child.geometry.dispose();
+          }
+          
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((material) => {
+                if (material.map) material.map.dispose();
+                material.dispose();
+              });
+            } else {
+              if (child.material.map) child.material.map.dispose();
+              child.material.dispose();
+            }
+          }
+        }
+      });
+      
+      // Clear the model reference
+      setModel(null);
+      setIsModelReady(false);
+    }
+  }, [scene, model]);
+
+  // Cancel all pending API requests
+  const cancelAllRequests = useCallback(() => {
+    console.log('Cancelling all API requests');
+    abortControllersRef.current.forEach((controller, key) => {
+      console.log(`Aborting request: ${key}`);
+      controller.abort();
+    });
+    abortControllersRef.current.clear();
+    setActiveApi(null);
+  }, []);
+
+  const exportAsGLB = useCallback(() => {
     if (model && scene) {
       exportModelAsGLB(model);
     }
-  };
+  }, [model, scene]);
 
-  const exportAsGLTF = () => {
+  const exportAsGLTF = useCallback(() => {
     if (model && scene) {
       exportModelAsGLTF(model);
     }
-  };
+  }, [model, scene]);
 
   return (
     <ModelViewerContext.Provider value={{
@@ -92,7 +148,13 @@ export const ModelViewerProvider: React.FC<ModelViewerProviderProps> = ({
       frameId,
       setFrameId,
       exportAsGLB,
-      exportAsGLTF
+      exportAsGLTF,
+      cleanupScene,
+      cancelAllRequests,
+      apiPriority,
+      setApiPriority,
+      activeApi,
+      setActiveApi
     }}>
       {children}
     </ModelViewerContext.Provider>

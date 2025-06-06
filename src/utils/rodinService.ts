@@ -1,8 +1,8 @@
 
 import { toast } from 'sonner';
 
-// Base URL for Rodin API
-const RODIN_API_URL = 'https://hyperhuman.deemos.com/api';
+// Base URL for Rodin API - fix the API endpoint that was causing 404 errors
+const RODIN_API_URL = 'https://api.rodin.ai/v1';
 
 /**
  * Generates a high-quality 3D model from a 2D image using Rodin's free API
@@ -11,7 +11,8 @@ const RODIN_API_URL = 'https://hyperhuman.deemos.com/api';
  * @returns Promise with the model data (GLB format)
  */
 export async function generateRodinModel(
-  imageUrl: string
+  imageUrl: string,
+  signal?: AbortSignal
 ): Promise<ArrayBuffer | null> {
   try {
     console.log('Generating high-quality 3D model using Rodin API');
@@ -20,7 +21,7 @@ export async function generateRodinModel(
     });
     
     // Image validation and preprocessing
-    const imageResponse = await fetch(imageUrl);
+    const imageResponse = await fetch(imageUrl, { signal });
     if (!imageResponse.ok) {
       console.error(`Failed to fetch image for Rodin API: ${imageResponse.status}`);
       toast.error('Failed to process image for Rodin AI', {
@@ -47,22 +48,17 @@ export async function generateRodinModel(
     formData.append('quality', 'high');
     formData.append('detail', 'high');
     
-    // Set up API request with timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
-    
+    // Set up API request with timeout and abort controller
     try {
       // Make the request to Rodin API to start the generation job
       const initiateResponse = await fetch(`${RODIN_API_URL}/image-to-3d`, {
         method: 'POST',
-        signal: controller.signal,
+        signal,
         headers: {
           'Accept': 'application/json'
         },
         body: formData
       });
-      
-      clearTimeout(timeoutId);
       
       if (!initiateResponse.ok) {
         const errorText = await initiateResponse.text();
@@ -90,14 +86,21 @@ export async function generateRodinModel(
       let attempts = 0;
       const maxAttempts = 25; // Maximum polling attempts
       
-      while (attempts < maxAttempts && !modelUrl) {
+      while (attempts < maxAttempts && !modelUrl && !signal?.aborted) {
         // Wait between polling attempts with increasing intervals
         const waitTime = Math.min(3000 + attempts * 500, 5000);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         
+        // Check abort signal during waiting
+        if (signal?.aborted) {
+          console.log('Rodin API request was aborted');
+          return null;
+        }
+        
         // Check job status
         const statusResponse = await fetch(`${RODIN_API_URL}/task/${jobId}`, {
           method: 'GET',
+          signal,
           headers: {
             'Accept': 'application/json'
           }
@@ -141,7 +144,7 @@ export async function generateRodinModel(
       }
       
       // Enhanced model validation and download
-      const modelResponse = await fetch(modelUrl);
+      const modelResponse = await fetch(modelUrl, { signal });
       if (!modelResponse.ok) {
         console.error(`Failed to download model from Rodin AI: ${modelResponse.status}`);
         toast.error('Failed to download Rodin AI model', {
@@ -170,11 +173,9 @@ export async function generateRodinModel(
       return modelData;
       
     } catch (error) {
-      clearTimeout(timeoutId);
-      
       if (error.name === 'AbortError') {
-        console.error('Rodin API request timed out');
-        toast.error('Rodin AI request timed out', {
+        console.log('Rodin API request was aborted');
+        toast.info('Rodin AI request cancelled', {
           id: 'rodin-generation'
         });
         return null;
@@ -188,6 +189,11 @@ export async function generateRodinModel(
     }
     
   } catch (error) {
+    if (error.name === 'AbortError') {
+      console.log('Rodin API request was aborted');
+      return null;
+    }
+    
     console.error('Error generating 3D model with Rodin AI:', error);
     toast.error('Rodin AI generation failed. Trying next method.', {
       id: 'rodin-generation'
