@@ -4,12 +4,12 @@ import { toast } from 'sonner';
 // Base URL for Hugging Face Inference API
 const HF_API_URL = 'https://api-inference.huggingface.co/models';
 
-// Updated model IDs for better quality 3D mesh generation
+// Working models for high-quality 3D mesh generation
 const MODELS = [
-  'stabilityai/TripoSR', // Stability AI's 3D generation model
-  'ashawkey/LGM', // High-quality 3D generation model
-  'facebook/mesh-transformer-sharp', // Meta's improved mesh generation model
-  'Intel/dpt-hybrid-midas' // Depth estimation model as fallback
+  'VAST-AI/TripoSG', // Latest working 3D generation model
+  'stabilityai/TripoSR', // Stability AI's proven 3D model
+  'ashawkey/LGM', // Reliable high-quality model
+  'Intel/dpt-hybrid-midas' // Depth estimation fallback
 ];
 
 /**

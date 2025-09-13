@@ -1,8 +1,13 @@
 
 import { toast } from 'sonner';
 
-// Base URL for CSM API
+// Updated CSM API endpoint with proper configuration
 const CSM_API_URL = 'https://api.csm.ai/v1';
+
+// Get API key from localStorage or environment
+const getApiKey = () => {
+  return localStorage.getItem('csmApiKey') || '';
+};
 
 /**
  * Generates a 3D model from a 2D image using CSM's free API

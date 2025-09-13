@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import React from 'react';
 import { Header } from '@/components/Header';
 import { ImageUploader } from '@/components/ImageUploader';
 import { ModelViewer } from '@/components/ModelViewer';
@@ -7,15 +7,16 @@ import { BackgroundAnimation } from '@/components/BackgroundAnimation';
 import { Button } from '@/components/ui/button';
 import { ArrowDown, Image, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { SettingsPanel } from '@/components/SettingsPanel';
 
 const Index = () => {
-  const [uploadedImage, setUploadedImage] = useState<File | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [showTips, setShowTips] = useState<boolean>(true);
+  const [uploadedImage, setUploadedImage] = React.useState<File | null>(null);
+  const [imageUrl, setImageUrl] = React.useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = React.useState<boolean>(false);
+  const [showTips, setShowTips] = React.useState<boolean>(true);
 
   // Display tips when the page loads
-  useEffect(() => {
+  React.useEffect(() => {
     if (showTips) {
       setTimeout(() => {
         toast.info(
@@ -61,17 +62,20 @@ const Index = () => {
           <div className="flex flex-col space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-semibold text-white">Upload Image</h2>
-              {uploadedImage && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleReset} 
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-white"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                  Try another image
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                <SettingsPanel />
+                {uploadedImage && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={handleReset} 
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-white"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Try another image
+                  </Button>
+                )}
+              </div>
             </div>
             
             <ImageUploader onImageUpload={handleImageUpload} />
@@ -133,11 +137,10 @@ const Index = () => {
             </div>
             
             <div className="p-3 bg-secondary/20 rounded-md border border-primary/20">
-              <h3 className="text-xs font-medium text-primary mb-2">How It Works</h3>
+              <h3 className="text-xs font-medium text-primary mb-2">Enhanced AI Pipeline</h3>
               <p className="text-xs text-muted-foreground">
-                Our system uses multiple AI APIs for best quality: Meshy AI (premium), 
-                Rodin, CSM, and Hugging Face (free). Each API specializes in different 
-                aspects of 3D generation, providing the most accurate results possible.
+                Our system uses an intelligent fallback approach: Hugging Face (free) → Hyper3D → CSM → Meshy AI → Enhanced Local Generation. 
+                Configure API keys in Settings for premium quality results.
               </p>
             </div>
           </div>

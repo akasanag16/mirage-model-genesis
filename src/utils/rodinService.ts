@@ -1,8 +1,8 @@
 
 import { toast } from 'sonner';
 
-// Base URL for Rodin API - fix the API endpoint that was causing 404 errors
-const RODIN_API_URL = 'https://api.rodin.ai/v1';
+// Updated API endpoint for Hyper3D (Rodin's new platform)
+const RODIN_API_URL = 'https://developer.hyper3d.ai/api/v1';
 
 /**
  * Generates a high-quality 3D model from a 2D image using Rodin's free API

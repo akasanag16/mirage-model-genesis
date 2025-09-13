@@ -9,17 +9,25 @@ import { useMeshyAiModel } from './hooks/useMeshyAiModel';
 import { useRodinModel } from './hooks/useRodinModel';
 import { useCsmModel } from './hooks/useCsmModel';
 import { toast } from 'sonner';
+import { apiKeyManager } from '../../utils/apiKeyManager';
+import { Enhanced3DGenerator } from '../../utils/enhancedImagePlane';
 
 interface ModelLoaderProps {
   imageUrl: string | null;
 }
 
 export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
-  // Optional API keys for 3D model generation services
-  const [meshyApiKey, setMeshyApiKey] = useState<string | undefined>(undefined);
+  // Enhanced API key management
+  const [apiKeys, setApiKeys] = useState({
+    meshyAi: apiKeyManager.getKey('meshyAi'),
+    csmAi: apiKeyManager.getKey('csmAi'),
+    rodinAi: apiKeyManager.getKey('rodinAi'),
+    huggingFace: apiKeyManager.getKey('huggingFace')
+  });
   const [modelGenerationStatus, setModelGenerationStatus] = useState<string>('');
   const [currentApiIndex, setCurrentApiIndex] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [enhancedGenerator] = useState(() => new Enhanced3DGenerator());
   const previousImageRef = useRef<string | null>(null);
   
   const { 
@@ -34,14 +42,23 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     setActiveApi
   } = useModelViewer();
   
-  // Setup API keys from localStorage if available
+  // Update API keys dynamically and setup cleanup
   useEffect(() => {
-    const savedMeshyKey = localStorage.getItem('meshyApiKey');
-    if (savedMeshyKey) {
-      setMeshyApiKey(savedMeshyKey);
-    }
+    const updateKeys = () => {
+      setApiKeys({
+        meshyAi: apiKeyManager.getKey('meshyAi'),
+        csmAi: apiKeyManager.getKey('csmAi'),
+        rodinAi: apiKeyManager.getKey('rodinAi'),
+        huggingFace: apiKeyManager.getKey('huggingFace')
+      });
+    };
+
+    // Update immediately and then periodically
+    updateKeys();
+    const interval = setInterval(updateKeys, 2000);
     
     return () => {
+      clearInterval(interval);
       // Always clean up when component unmounts
       cancelAllRequests();
     };
@@ -108,9 +125,11 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
       setActiveApi(apiToTry);
       setIsProcessing(true);
       
-      // Skip Meshy if no API key
-      if (apiToTry === 'meshy' && !meshyApiKey) {
-        console.log('Skipping Meshy AI (no API key)');
+      // Skip APIs without required keys (except Hugging Face which is free)
+      if ((apiToTry === 'meshy' && !apiKeys.meshyAi) ||
+          (apiToTry === 'csm' && !apiKeys.csmAi) ||
+          (apiToTry === 'rodin' && !apiKeys.rodinAi)) {
+        console.log(`Skipping ${apiToTry} - no API key configured`);
         setCurrentApiIndex(prev => prev + 1);
         setIsProcessing(false);
         return;
@@ -139,8 +158,57 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
             // Will be handled by the custom hook
             break;
           case 'local':
-            // Process local texture generation (fallback)
-            // Handled separately below
+            // Enhanced local generation as final fallback
+            console.log('Using enhanced local 3D generation');
+            toast.loading('Creating enhanced 3D model locally...', {
+              id: 'api-progress'
+            });
+
+            // Load texture and create enhanced 3D model
+            const textureLoader = new THREE.TextureLoader();
+            textureLoader.load(
+              imageUrl,
+              (texture) => {
+                try {
+                  // Create enhanced displacement maps
+                  const maps = enhancedGenerator.createAdvancedMaps(texture);
+                  
+                  // Create detailed geometry (higher resolution)
+                  const geometry = new THREE.PlaneGeometry(4, 4, 128, 128);
+                  
+                  // Apply advanced displacement
+                  enhancedGenerator.applyAdvancedDisplacement(geometry, maps);
+                  
+                  // Create enhanced material
+                  const material = enhancedGenerator.createEnhancedMaterial(texture, maps);
+                  
+                  // Create the final model
+                  const model = new THREE.Mesh(geometry, material);
+                  model.rotation.x = -Math.PI / 2; // Lay flat
+                  model.position.set(0, 0, 0);
+                  
+                  onModelLoaded(model, 'local');
+                  setIsProcessing(false);
+                  modelGenerated = true;
+                } catch (error) {
+                  console.error('Enhanced local generation failed:', error);
+                  setCurrentApiIndex(prev => prev + 1);
+                  setIsProcessing(false);
+                  toast.error('Enhanced local generation failed', {
+                    id: 'api-progress'
+                  });
+                }
+              },
+              undefined,
+              (error) => {
+                console.error('Failed to load texture for enhanced generation:', error);
+                setCurrentApiIndex(prev => prev + 1);
+                setIsProcessing(false);
+                toast.error('Failed to load image for enhanced generation', {
+                  id: 'api-progress'
+                });
+              }
+            );
             break;
         }
         
@@ -162,7 +230,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
     };
     
     processNextApi();
-  }, [imageUrl, currentApiIndex, isProcessing, scene, apiPriority, meshyApiKey, setIsLoading, setActiveApi]);
+  }, [imageUrl, currentApiIndex, isProcessing, scene, apiPriority, apiKeys.meshyAi, setIsLoading, setActiveApi]);
   
   // Handle model ready state
   const onModelLoaded = useCallback((model: THREE.Object3D, source: string) => {
@@ -202,7 +270,7 @@ export const ModelLoader: React.FC<ModelLoaderProps> = ({ imageUrl }) => {
   // Meshy AI model generation (premium, highest quality)
   useMeshyAiModel(
     imageUrl,
-    meshyApiKey,
+    apiKeys.meshyAi,
     (model) => {
       if (apiPriority[currentApiIndex] === 'meshy') {
         onModelLoaded(model, 'meshy');
